@@ -10,3 +10,7 @@ Cargo.lock
 **/*.rs.bk
 Arduino_STM32-master/*
 embedded rust/*
+generic_boot20_pb12.bin
+
+/target
+**/*.rs.bk

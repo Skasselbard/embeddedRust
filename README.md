@@ -5,6 +5,13 @@ Getting rust to work an the Blue Pill stm32 board
 - https://rust-embedded.github.io/book/intro/index.html
 - https://wiki.stm32duino.com/index.php?title=Blue_Pill
 - https://os.phil-opp.com/freestanding-rust-binary/
+- https://github.com/rust-embedded/awesome-embedded-rust
+- https://github.com/bobbin-rs/bobbin-cli
+
+# Board specs
+https://www.st.com/resource/en/datasheet/stm32f103c8.pdf
+- start of flash 0x0800_0000
+- start of sram 0x2000_0000
 
 # Steps Done
 # Intsall boatloader with Stlink (probablyincomplete)
@@ -59,7 +66,7 @@ cargo init --bin --edition 2018
 ```
 
 get the cortex m quickstart files like described in the embedded rust book  
-https://rust-embedded.github.io/book/start/qemu.html  
+https://github.com/rust-embedded/cortex-m-quickstart/blob/master/
   
 Build binary
 ```

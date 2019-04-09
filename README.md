@@ -2,14 +2,24 @@
 Getting rust to work an the Blue Pill stm32 board
 
 # Links
-- https://rust-embedded.github.io/book/intro/index.html
-- https://wiki.stm32duino.com/index.php?title=Blue_Pill
-- https://os.phil-opp.com/freestanding-rust-binary/
-- https://github.com/rust-embedded/awesome-embedded-rust
-- https://github.com/bobbin-rs/bobbin-cli
+- [The embedded rust book](https://rust-embedded.github.io/book/intro/index.html)
+- [blue pill wiki page](https://wiki.stm32duino.com/index.php?title=Blue_Pill)
+- [rust core basics](https://os.phil-opp.com/freestanding-rust-binary/)
+- [embedded rust project and link collection](https://github.com/rust-embedded/awesome-embedded-rust)
+- [gdb commands](https://darkdust.net/files/GDB%20Cheat%20Sheet.pdf)
+- [ARM instruction set](http://www.peter-cockerell.net/aalp/html/ch-3.html)
+- [rust blue pill setup instructions and helpfull pages](https://github.com/lupyuen/stm32-blue-pill-rust)
+- [(want to read)](http://blog.japaric.io/brave-new-io/)
+
+# crates
+- blue pill periphials crate https://crates.io/crates/stm32f103xx
+- stm32f1 crate https://github.com/stm32-rs/stm32-rs
+- blue pill hal crate https://crates.io/crates/stm32f1xx-hal
 
 # Board specs
-https://www.st.com/resource/en/datasheet/stm32f103c8.pdf
+- [datasheet](https://www.st.com/resource/en/datasheet/stm32f103c8.pdf)
+- [reference manual](https://www.st.com/content/ccc/resource/technical/document/reference_manual/59/b9/ba/7f/11/af/43/d5/CD00171190.pdf/files/CD00171190.pdf/jcr:content/translations/en.CD00171190.pdf)
+- [bootloader notes](https://www.st.com/content/ccc/resource/technical/document/application_note/b9/9b/16/3a/12/1e/40/0c/CD00167594.pdf/files/CD00167594.pdf/jcr:content/translations/en.CD00167594.pdf)
 - start of flash 0x0800_0000
 - start of sram 0x2000_0000
 

@@ -56,7 +56,8 @@ Flash the board with stm32flash:
 - connect rx and tx to A9(rx1) and A10(tx1) in the "correct" way
   - that normaly means rx to tx and vice verca
   - but somtimes not -- depends on the adapter
-- connect Boot0 Jumper to 0 (and Boot1 Jumper to 1)
+- ~~connect Boot0 Jumper to 0 (and Boot1 Jumper to 1)~~
+- connect both Boot Jumper to 0
 
 ```
 Arduino_STM32-master/tools/linux64/stm32flash/stm32flash -w ./generic_boot20_pb12.bin -v -g 0x0 /dev/ttyUSB0

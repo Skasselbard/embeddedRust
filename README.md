@@ -10,6 +10,8 @@ Getting rust to work an the Blue Pill stm32 board
 - [ARM instruction set](http://www.peter-cockerell.net/aalp/html/ch-3.html)
 - [rust blue pill setup instructions and helpfull pages](https://github.com/lupyuen/stm32-blue-pill-rust)
 - [(want to read)](http://blog.japaric.io/brave-new-io/)
+-[openocd docu](http://openocd.org/doc-release/pdf/openocd.pdf)
+https://medium.com/@ly.lee/hosting-embedded-rust-apps-on-apache-mynewt-with-stm32-blue-pill-c86b119fe5f
 
 # crates
 - blue pill periphials crate https://crates.io/crates/stm32f103xx

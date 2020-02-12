@@ -48,20 +48,7 @@ Update:
 ```
 sudo udevadm control --reload-rules
 ```
-## Install boatloader with USB to Serial adapter
-Download boatloader tools https://github.com/rogerclarkmelbourne/Arduino_STM32/archive/master.zip  
-Download the bootloader https://github.com/rogerclarkmelbourne/STM32duino-bootloader/blob/master/binaries/generic_boot20_pb12.bin?raw=true  
-Flash the board with stm32flash:
-- need USB to Serial Adapter
-- connect GND and 3.3V Pins
-- connect rx and tx to A9(rx1) and A10(tx1) in the "correct" way
-  - that normaly means rx to tx and vice verca
-  - but somtimes not -- depends on the adapter
-- ~~connect Boot0 Jumper to 0 (and Boot1 Jumper to 1)~~
 
-```
-Arduino_STM32-master/tools/linux64/stm32flash/stm32flash -w ./generic_boot20_pb12.bin -v -g 0x0 /dev/ttyUSB0
-```
 ## Debug with ST-Link
 - connect both Boot Jumper to 0
 

@@ -9,8 +9,6 @@ use stm32f1xx_hal::prelude::_embedded_hal_PwmPin as PwmPin;
 use stm32f1xx_hal::prelude::_embedded_hal_adc_OneShot as OneShot;
 
 use nb::Result;
-use stm32f1xx_hal::gpio::{gpioa, Alternate, PushPull};
-use stm32f1xx_hal::{rcc, time::U32Ext, timer::Timer};
 
 pub struct Potentiometer<ADC, ADC_NUM, VALUE, ADC_CHANNEL> {
     pin: ADC_CHANNEL,

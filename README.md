@@ -10,8 +10,8 @@ Getting rust to work an the Blue Pill stm32 board
 - [ARM instruction set](http://www.peter-cockerell.net/aalp/html/ch-3.html)
 - [rust blue pill setup instructions and helpfull pages](https://github.com/lupyuen/stm32-blue-pill-rust)
 - [(want to read)](http://blog.japaric.io/brave-new-io/)
--[openocd docu](http://openocd.org/doc-release/pdf/openocd.pdf)
-https://medium.com/@ly.lee/hosting-embedded-rust-apps-on-apache-mynewt-with-stm32-blue-pill-c86b119fe5f
+- [openocd docu](http://openocd.org/doc-release/pdf/openocd.pdf)
+- https://medium.com/@ly.lee/hosting-embedded-rust-apps-on-apache-mynewt-with-stm32-blue-pill-c86b119fe5f
 
 # crates
 - blue pill periphials crate https://crates.io/crates/stm32f103xx
@@ -21,6 +21,7 @@ https://medium.com/@ly.lee/hosting-embedded-rust-apps-on-apache-mynewt-with-stm3
 # Board specs
 - [datasheet](https://www.st.com/resource/en/datasheet/stm32f103c8.pdf)
 - [reference manual](https://www.st.com/content/ccc/resource/technical/document/reference_manual/59/b9/ba/7f/11/af/43/d5/CD00171190.pdf/files/CD00171190.pdf/jcr:content/translations/en.CD00171190.pdf)
+- [flash programming manual](https://www.st.com/content/ccc/resource/technical/document/programming_manual/10/98/e8/d4/2b/51/4b/f5/CD00283419.pdf/files/CD00283419.pdf/jcr:content/translations/en.CD00283419.pdf)
 - [bootloader notes](https://www.st.com/content/ccc/resource/technical/document/application_note/b9/9b/16/3a/12/1e/40/0c/CD00167594.pdf/files/CD00167594.pdf/jcr:content/translations/en.CD00167594.pdf)
 - start of flash 0x0800_0000
 - start of sram 0x2000_0000
@@ -57,11 +58,12 @@ Flash the board with stm32flash:
   - that normaly means rx to tx and vice verca
   - but somtimes not -- depends on the adapter
 - ~~connect Boot0 Jumper to 0 (and Boot1 Jumper to 1)~~
-- connect both Boot Jumper to 0
 
 ```
 Arduino_STM32-master/tools/linux64/stm32flash/stm32flash -w ./generic_boot20_pb12.bin -v -g 0x0 /dev/ttyUSB0
 ```
+## Debug with ST-Link
+- connect both Boot Jumper to 0
 
 ## setup rust
 Install toolchain

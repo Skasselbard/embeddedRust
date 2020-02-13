@@ -3,6 +3,7 @@ name = "embedded_rust"
 version = "0.1.0"
 authors = ["Tom Meyer <tom.meyer@uni-rostock.de>"]
 edition = "2018"
+default-run = "main"
 
 [dependencies]
 cortex-m = "0.6.2"
@@ -25,6 +26,11 @@ debug = true # symbols are nice and they don't increase the size on Flash
 lto = true # better optimizations
 
 [[bin]]
-name="embedded_rust"
+name="main"
+path="src/main.rs"
 test = false
 bench = false
+
+[[bin]]
+name="dimmer"
+path="src/dimmer.rs"

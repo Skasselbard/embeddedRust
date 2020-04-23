@@ -1,5 +1,3 @@
 mod dimmer;
 
-use crate::lib::*;
-
-pub use dimmer::App as Dimmer;
+// pub use dimmer::App as Dimmer;

@@ -1,3 +1,4 @@
+![Rust on ARM](https://github.com/Skasselbard/embeddedRust/workflows/Rust%20on%20ARM/badge.svg)
 # Embedded Rust
 Getting rust to work an the Blue Pill stm32 board
 

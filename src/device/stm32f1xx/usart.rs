@@ -1,7 +1,7 @@
 use crate::device::DeviceInterrupt;
 use crate::events::{Event, Priority};
 use crate::RuntimeError;
-use crossbeam_queue::{ArrayQueue, PushError};
+use crossbeam_queue::ArrayQueue;
 use embedded_hal::serial::{Read, Write};
 use stm32f1xx_hal::device::{interrupt, USART1};
 use stm32f1xx_hal::serial::{self, Rx, Tx};
@@ -10,6 +10,23 @@ pub const QUEUE_LENGTH: usize = 32;
 // pub static mut USART1_OBJ: Option<Usart<USART1>> = None;
 static mut USART1_SINGLTN: Option<(Rx<USART1>, ArrayQueue<Result<u8, serial::Error>>)> = None;
 
+#[interrupt]
+fn USART1() {
+    let usart = unsafe {
+        USART1_SINGLTN
+            .as_mut()
+            .expect("acces to uninitialized usart1")
+    };
+    let byte = block!(usart.0.read()); // should not block because we are in rdy interrupt
+    usart.1.push(byte).expect("usart1: buffer filled");
+    crate::events::push(
+        Event::ResourceEvent(DeviceInterrupt::USART1),
+        Priority::Critical,
+    )
+    .expect("filled event queue");
+}
+
+/// Bus has to be some usart type from stm32f1xx_hal::stm32::USARTx
 pub struct Usart<Bus> {
     tx: Tx<Bus>,
     buffer: &'static ArrayQueue<Result<u8, serial::Error>>,
@@ -54,21 +71,6 @@ impl Usart<USART1> {
             buffer: unsafe { &USART1_SINGLTN.as_ref().unwrap().1 }, // just initialized
         })
     }
-}
-#[interrupt]
-fn USART1() {
-    let usart = unsafe {
-        USART1_SINGLTN
-            .as_mut()
-            .expect("acces to uninitialized usart1")
-    };
-    let byte = block!(usart.0.read()); // should not block because we are in rdy interrupt
-    usart.1.push(byte).expect("usart1: buffer filled");
-    crate::events::push(
-        Event::ResourceEvent(DeviceInterrupt::USART1),
-        Priority::Critical,
-    )
-    .expect("filled event queue");
 }
 
 /// usart with default values

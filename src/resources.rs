@@ -7,6 +7,7 @@ pub enum ResourceError {
     NonWritingResource,
     Utf8Error(core::str::Utf8Error),
     FloatError(core::num::ParseFloatError),
+    BusError,
 }
 
 #[allow(unused)]

@@ -26,16 +26,15 @@ impl Executor {
             Err(_) => Err(RuntimeError::TaskQueueIsFull),
         }
     }
-    pub fn run(&mut self) -> Result<(), RuntimeError> {
+    pub fn run(&mut self) {
         while let Some(HeapElement { priority, mut task }) = self.task_queue.pop() {
             let waker = dummy_waker();
             let mut context = Context::from_waker(&waker);
             match task.poll(&mut context) {
                 Poll::Ready(()) => {} // task done
-                Poll::Pending => self.spawn(task, priority)?,
+                Poll::Pending => self.spawn(task, priority).expect("task requeue failed"),
             }
         }
-        Ok(())
     }
 }
 

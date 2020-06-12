@@ -135,8 +135,10 @@ impl<'device> Runtime<'device> {
     }
     pub fn run(&mut self) -> ! {
         loop {
-            // interrupts checken -> device spezifisch
-            // ? waker checken ?
+            while let Some(event) = events::next() {
+                self.handle_event(event);
+            }
+            // TODO: ? waker checken ?
             // TODO: do something  eith the result!
             self.executor.run();
             cortex_m::asm::wfi(); // safe power till next interrupt
@@ -144,6 +146,11 @@ impl<'device> Runtime<'device> {
     }
     pub fn spawn_task(&mut self, task: Task, priority: usize) -> Result<(), RuntimeError> {
         self.executor.spawn(task, priority)
+    }
+    fn handle_event(&self, event: events::Event) {
+        match event{
+            _ => unimplemented!()
+        }
     }
 }
 

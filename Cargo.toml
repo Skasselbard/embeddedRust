@@ -8,7 +8,7 @@ default-run = "main"
 [dependencies]
 cortex-m = "0.6.2"
 cortex-m-rt = "0.6.12"
-embedded-hal = {version = "0.2.3", features = ["unproven"]}
+embedded-hal = {version = "0.2.3"}
 stm32f1xx-hal = {version = "0.5.3",features = ["stm32f103","rt", "medium"]}
 nb = "0.1.2"
 heapless = "0.5.3"

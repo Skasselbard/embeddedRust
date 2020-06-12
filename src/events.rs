@@ -1,6 +1,6 @@
+use crate::DeviceInterrupt;
 use conquer_once::spin::OnceCell;
 use crossbeam_queue::{ArrayQueue, PushError};
-use crate::{ResourceID, DeviceInterrupt};
 
 pub enum Priority {
     /// priority 0: System Errors, Faults etc
@@ -21,15 +21,25 @@ pub enum Event {
     ResourceEvent(DeviceInterrupt),
 }
 
-/// Next event if any,
+pub fn next() -> Option<Event> {
+    pop(Priority::Error)
+        .or(pop(Priority::Critical))
+        .or(pop(Priority::Normal))
+}
+
+/// Next event with given priority if any,
 /// None otherwise
-pub fn pop(prio: Priority) -> Option<Event> {
+fn pop(prio: Priority) -> Option<Event> {
     let queue = match prio {
         Priority::Error => &ERROR_QUEUE,
         Priority::Critical => &CRITICAL_QUEUE,
         Priority::Normal => &NORMAL_QUEUE,
     };
-    queue.try_get().expect("Uninitialized event queue").pop().ok()
+    queue
+        .try_get()
+        .expect("Uninitialized event queue")
+        .pop()
+        .ok()
 }
 /// **Error**
 /// if the queue is full
@@ -39,7 +49,11 @@ pub fn push(event: Event, prio: Priority) -> Result<(), Event> {
         Priority::Critical => &CRITICAL_QUEUE,
         Priority::Normal => &NORMAL_QUEUE,
     };
-    match queue.try_get().expect("Uninitialized event queue").push(event) {
+    match queue
+        .try_get()
+        .expect("Uninitialized event queue")
+        .push(event)
+    {
         Ok(()) => Ok(()),
         Err(PushError(e)) => Err(e),
     }

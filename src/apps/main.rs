@@ -22,7 +22,7 @@ use stm32f1xx_hal::{
     timer::{Tim2NoRemap, Timer},
 };
 
-use embedded_rust::device::{self};
+use embedded_rust::device::{self, stm32f1xx::Gpio};
 use embedded_rust::*;
 
 pub const HEAP_START: usize = 0x2000_0000;
@@ -50,19 +50,24 @@ fn main() -> ! {
     let mut afio = p.AFIO.constrain(&mut rcc.apb2);
 
     let mut runtime = Runtime::init(HEAP_START, HEAP_SIZE, 32).unwrap();
-    let mut usart1 = usart1!(gpioa, p, rcc, afio, clocks);
-    #[interrupt]
-    fn TIM2() {
-        // unsafe { x += 1 };
-    }
-    let mut pwm = pwm_tim3!(gpioa, gpiob, p, rcc, afio, clocks, ;gpiob.pb0);
-    let (mut adc, mut channels) = adc1!(gpioa, p, rcc, clocks, gpioa.pa7);
-    let id = runtime.add_resource(nom_uri::Uri::parse("bus:uart/1").unwrap(), &mut usart1);
-    runtime.associate_interrupt(id, DeviceInterrupt::USART1);
+    // let mut usart1 = usart1!(gpioa, p, rcc, afio, clocks);
+    let mut pwm = pwm_tim2!(gpioa, p, rcc, afio, clocks, gpioa.pa0);
+    // let (mut adc, mut channels) = adc1!(gpioa, p, rcc, clocks, gpioa.pa7);
+    // let id = runtime.add_resource(nom_uri::Uri::parse("bus:uart/1").unwrap(), &mut usart1);
+    // runtime.associate_interrupt(id, DeviceInterrupt::USART1);
+
+    let mut gpio = build_gpio!(gpioa, pa6, input, floating);
+    gpio.enable_interrupt(&mut afio);
+
     let mut task = example_task();
     runtime.spawn_task(Task::new(task), 0);
     runtime.run()
 }
+
+async fn switch_pwm(){
+
+}
+
 async fn async_number() -> u32 {
     42
 }

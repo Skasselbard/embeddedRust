@@ -1,4 +1,5 @@
 #![no_std]
+#![feature(const_btree_new)]
 extern crate alloc;
 
 #[macro_use]
@@ -17,14 +18,14 @@ pub mod schemes;
 static ALLOCATOR: linked_list_allocator::LockedHeap = linked_list_allocator::LockedHeap::empty();
 
 use alloc::boxed::Box;
+use alloc::collections::BTreeMap;
+use alloc::vec::Vec;
 use core::{
     future::Future,
     pin::Pin,
     task::{Context, Poll},
 };
 pub use device::DeviceInterrupt;
-use heapless::FnvIndexMap as HashMap;
-use heapless::{consts::*, Vec};
 use nom_uri::Uri;
 pub use resources::{Resource, ResourceID};
 
@@ -34,12 +35,12 @@ pub struct Task {
 
 /// Max allowed elements in resource list.
 /// ['ResourceID'] only backs values up to 255
-pub type ResourceCount = U32;
+// pub type ResourceCount = U32;
 
 pub struct Runtime<'device> {
-    resource_ids: HashMap<Uri<'device>, ResourceID, ResourceCount>,
-    resources: Vec<&'device mut dyn Resource, ResourceCount>,
-    associated_interrupts: Vec<alloc::vec::Vec<DeviceInterrupt>, ResourceCount>,
+    resource_ids: BTreeMap<Uri<'device>, ResourceID>,
+    resources: Vec<&'device mut dyn Resource>,
+    associated_interrupts: Vec<alloc::vec::Vec<DeviceInterrupt>>,
     executor: executor::Executor,
 }
 
@@ -68,9 +69,9 @@ impl<'device> Runtime<'device> {
             .try_init_once(|| crossbeam_queue::ArrayQueue::new(max_events_per_prio))
             .or_else(|_| Err(RuntimeError::MultipleInitializations))?;
         Ok(Self {
-            resource_ids: HashMap::<_, _, ResourceCount>::new(),
-            resources: Vec::<_, ResourceCount>::new(),
-            associated_interrupts: Vec::<_, ResourceCount>::new(),
+            resources: Vec::with_capacity(32),
+            resource_ids: BTreeMap::new(),
+            associated_interrupts: Vec::with_capacity(8),
             executor: executor::Executor::new(),
         })
     }
@@ -102,15 +103,10 @@ impl<'device> Runtime<'device> {
         resource: &'device mut dyn Resource,
     ) -> ResourceID {
         let id = self.resources.len();
-        self.resources
-            .push(resource)
-            .unwrap_or_else(|_| panic!("Resource array full"));
-        self.resource_ids
-            .insert(uri, ResourceID(id as u8))
-            .unwrap_or_else(|_| panic!("Resource array full"));
+        self.resources.push(resource);
+        self.resource_ids.insert(uri, ResourceID(id as u8));
         self.associated_interrupts
-            .push(alloc::vec::Vec::with_capacity(0))
-            .unwrap_or_else(|_| panic!("Resource array full"));
+            .push(alloc::vec::Vec::with_capacity(0));
         ResourceID(id as u8)
     }
     pub fn associate_interrupt(
@@ -144,12 +140,12 @@ impl<'device> Runtime<'device> {
             cortex_m::asm::wfi(); // safe power till next interrupt
         }
     }
-    pub fn spawn_task(&mut self, task: Task, priority: usize) -> Result<(), RuntimeError> {
+    pub fn spawn_task(&mut self, task: Task, priority: usize) {
         self.executor.spawn(task, priority)
     }
     fn handle_event(&self, event: events::Event) {
-        match event{
-            _ => unimplemented!()
+        match event {
+            _ => unimplemented!(),
         }
     }
 }

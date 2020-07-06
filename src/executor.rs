@@ -1,11 +1,10 @@
 use super::*;
+use alloc::collections::BinaryHeap;
 use core::task::{RawWaker, Waker};
-use heapless::binary_heap::{BinaryHeap, Min};
-use heapless::consts::*;
 
 pub struct Executor {
     /// lower value means higher priority
-    task_queue: BinaryHeap<HeapElement, U32, Min>,
+    task_queue: BinaryHeap<HeapElement>,
 }
 
 struct HeapElement {
@@ -20,11 +19,8 @@ impl Executor {
         }
     }
 
-    pub fn spawn(&mut self, task: Task, priority: usize) -> Result<(), RuntimeError> {
-        match self.task_queue.push(HeapElement { priority, task }) {
-            Ok(_) => Ok(()),
-            Err(_) => Err(RuntimeError::TaskQueueIsFull),
-        }
+    pub fn spawn(&mut self, task: Task, priority: usize) {
+        self.task_queue.push(HeapElement { priority, task });
     }
     pub fn run(&mut self) {
         while let Some(HeapElement { priority, mut task }) = self.task_queue.pop() {
@@ -32,7 +28,7 @@ impl Executor {
             let mut context = Context::from_waker(&waker);
             match task.poll(&mut context) {
                 Poll::Ready(()) => {} // task done
-                Poll::Pending => self.spawn(task, priority).expect("task requeue failed"),
+                Poll::Pending => self.spawn(task, priority),
             }
         }
     }

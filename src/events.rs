@@ -1,3 +1,5 @@
+use crate::device::ExtiEvent;
+use crate::resources::ResourceError;
 use crate::DeviceInterrupt;
 use conquer_once::spin::OnceCell;
 use crossbeam_queue::{ArrayQueue, PushError};
@@ -16,9 +18,10 @@ pub(crate) static CRITICAL_QUEUE: OnceCell<ArrayQueue<Event>> = OnceCell::uninit
 pub(crate) static NORMAL_QUEUE: OnceCell<ArrayQueue<Event>> = OnceCell::uninit();
 
 #[non_exhaustive]
-#[derive(Copy, Clone, Debug)]
+#[derive(Clone)]
 pub enum Event {
-    ResourceEvent(DeviceInterrupt),
+    DeviceInterrupt(DeviceInterrupt),
+    ExternalInterrupt(ExtiEvent),
 }
 
 pub fn next() -> Option<Event> {
@@ -56,5 +59,14 @@ pub fn push(event: Event, prio: Priority) -> Result<(), Event> {
     {
         Ok(()) => Ok(()),
         Err(PushError(e)) => Err(e),
+    }
+}
+
+impl core::fmt::Debug for Event {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        match self {
+            Event::DeviceInterrupt(e) => write!(f, "DeviceInterrupt({:?})", e),
+            Event::ExternalInterrupt(i) => write!(f, "ExternalInterrupt"),
+        }
     }
 }

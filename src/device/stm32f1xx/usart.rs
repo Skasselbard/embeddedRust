@@ -20,13 +20,13 @@ fn USART1() {
     let byte = block!(usart.0.read()); // should not block because we are in rdy interrupt
     usart.1.push(byte).expect("usart1: buffer filled");
     crate::events::push(
-        Event::ResourceEvent(DeviceInterrupt::USART1),
+        Event::DeviceInterrupt(DeviceInterrupt::USART1),
         Priority::Critical,
     )
     .expect("filled event queue");
 }
 
-/// Bus has to be some usart type from stm32f1xx_hal::stm32::USARTx
+/// ``Bus`` has to be some usart type from stm32f1xx_hal::stm32::USARTx
 pub struct Usart<Bus> {
     tx: Tx<Bus>,
     buffer: &'static ArrayQueue<Result<u8, serial::Error>>,
@@ -93,42 +93,6 @@ macro_rules! usart1 {
         serial.listen(Event::Rxne);
         let (tx, rx) = serial.split();
         let serial = Usart::new(tx, rx).unwrap();
-        crate::device::usart::Usart::new(serial)
-    }};
-}
-/// usart with default values
-/// Pins: PA2, PA3
-#[macro_export]
-macro_rules! usart2 {
-    ( $gpioa:expr, $peripherals:expr, $rcc:expr, $afio:expr, $clocks:expr) => {{
-        let tx = $gpioa.pa2.into_alternate_push_pull(&mut $gpioa.crl);
-        let rx = $gpioa.pa3;
-        let serial = stm32f1xx_hal::serial::Serial::usart2(
-            $peripherals.USART2,
-            (tx, rx),
-            &mut $afio.mapr,
-            stm32f1xx_hal::serial::Config::default(),
-            $clocks,
-            &mut $rcc.apb1,
-        );
-        crate::device::usart::Usart::new(serial)
-    }};
-}
-/// usart with default values
-/// Pins: PB!=, PA11
-#[macro_export]
-macro_rules! usart3 {
-    ( $gpiob:expr, $peripherals:expr, $rcc:expr, $afio:expr, $clocks:expr) => {{
-        let tx = $gpiob.pb10.into_alternate_push_pull(&mut $gpiob.crh);
-        let rx = $gpiob.pb11;
-        let serial = stm32f1xx_hal::serial::Serial::usart3(
-            $peripherals.USART3,
-            (tx, rx),
-            &mut $afio.mapr,
-            stm32f1xx_hal::serial::Config::default(),
-            $clocks,
-            &mut $rcc.apb1,
-        );
         crate::device::usart::Usart::new(serial)
     }};
 }

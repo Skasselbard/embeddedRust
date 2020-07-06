@@ -1,13 +1,17 @@
-#[derive(Copy, Clone, PartialEq, Eq, Debug)]
+#[derive(Copy, Clone, PartialEq, Eq, Debug, Hash)]
 pub struct ResourceID(pub u8);
 
 #[non_exhaustive]
+#[derive(Debug)]
 pub enum ResourceError {
     NonReadingResource,
     NonWritingResource,
     Utf8Error(core::str::Utf8Error),
     FloatError(core::num::ParseFloatError),
     BusError,
+    NotFound,
+    /// The resource is ill configured for the desired task
+    ConfigurationError,
 }
 
 #[allow(unused)]

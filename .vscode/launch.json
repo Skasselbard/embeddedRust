@@ -5,16 +5,25 @@
     "version": "0.2.0",
     "configurations": [
         {
+            "gdbpath": "gdb-multiarch",
             "name": "Cortex Debug",
             "cwd": "${workspaceRoot}",
-            "executable": "${workspaceFolder}/target/thumbv7m-none-eabi/debug/embedded_rust",
+            "executable": "${workspaceFolder}/target/thumbv7m-none-eabi/debug/main",
             "request": "launch",
             "type": "cortex-debug",
             "servertype": "openocd",
-            "device": "STM32F103C8",
+            // "device": "STM32F103C8",
             "configFiles": [
-                "${workspaceFolder}/openocd.cfg"
-            ]
+                "${workspaceFolder}/openocd.cfg",
+            ],
+            "debuggerArgs": [
+                "-x",
+                "${workspaceFolder}/.vscode/cortex_debug.gdb"
+            ],
+            "preLaunchTask": {
+                "type": "cargo",
+                "subcommand": "build"
+            }
         }
     ]
 }

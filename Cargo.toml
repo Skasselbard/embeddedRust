@@ -1,28 +1,23 @@
 [package]
+authors = ["Tom Meyer <tom.meyer@uni-rostock.de>"]
+default-run = "main"
+edition = "2018"
 name = "embedded_rust"
 version = "0.2.0"
-authors = ["Tom Meyer <tom.meyer@uni-rostock.de>"]
-edition = "2018"
-default-run = "main"
 
 [dependencies]
 cortex-m = "0.6.2"
 cortex-m-rt = "0.6.12"
 embedded-hal = {version = "0.2.3"}
-stm32f1xx-hal = {version = "0.5.3",features = ["stm32f103","rt", "medium"]}
 nb = "0.1.2"
-heapless = "0.5.3"
-hash32 = "0.1.1"
-hash32-derive = "0.1.0"
-nom-uri = { git = "https://github.com/Skasselbard/nom-uri"}
+nom-uri = {git = "https://github.com/Skasselbard/nom-uri"}
+stm32f1xx-hal = {version = "0.5.3", features = ["stm32f103", "rt", "medium"]}
 # nom-uri = { path = "../nom-uri"}
-log = "0.4.8"
-arrayref = "0.3.6"
-as-slice = "0.1.3"
 cortex-m-semihosting = "0.3.5"
-linked_list_allocator = "0.8.2"
+linked_list_allocator = {version = "0.8.4"}
+log = "0.4.8"
 # concurency safe data structures
-crossbeam-queue = {version = "0.2.1",default-features = false, features = ["alloc"]}
+crossbeam-queue = {version = "0.2.1", default-features = false, features = ["alloc"]}
 # static initialization
 conquer-once = {version = "0.2.0", default-features = false}
 
@@ -31,25 +26,29 @@ conquer-once = {version = "0.2.0", default-features = false}
 
 [profile.release]
 codegen-units = 1 # better optimizations
-# debug = true # symbols are nice and they don't increase the size on Flash
+debug = true # symbols are nice and they don't increase the size on Flash
+debug-assertions = true 
 lto = true # better optimizations
-opt-level = "z"
+opt-level = "z" # optimized for size
 # panic = "abort"
+
+[profile.dev]
+opt-level = "z"
 
 # https://rust-embedded.github.io/book/unsorted/speed-vs-size.html
 [profile.dev.package."*"]
-opt-level = "z"
+opt-level = "z" # optimized for size
 
 [lib]
-path="src/lib.rs"
-test = false
 bench = false
+path = "src/lib.rs"
+test = false
 
 [[bin]]
-name="main"
-path="src/apps/main.rs"
-test = false
 bench = false
+name = "main"
+path = "src/apps/main.rs"
+test = false
 
 # [[bin]]
 # name="dimmer"

@@ -1,18 +1,24 @@
-use super::Pin;
+use super::{Device, DeviceError, Pin};
 use crate::events::{Event, Priority};
 use crate::resources::{Resource, ResourceError};
+use alloc::boxed::Box;
 use alloc::collections::{BTreeMap, BTreeSet};
 use core::cmp::Ordering;
 use core::convert::Infallible;
-use embedded_hal::digital::v2::{InputPin, OutputPin};
+use embedded_hal::digital::v2;
 use stm32f1xx_hal::device::interrupt;
 use stm32f1xx_hal::gpio::{
-    Alternate, Analog, ExtiPin, Floating, Input, OpenDrain, Output, PullDown, PullUp, PushPull, Pxx,
+    gpioa, gpiob, gpioc, gpiod, Alternate, Analog, ExtiPin, Floating, Input, OpenDrain, Output,
+    PullDown, PullUp, PushPull, Pxx,
 };
+
+static mut GPIOS: Gpios = Gpios::new();
+trait InputPin: v2::InputPin<Error = Infallible> {}
+trait OutputPin: v2::StatefulOutputPin<Error = Infallible> + v2::OutputPin<Error = Infallible> {}
 
 #[derive(Copy, Clone, PartialEq, Eq)]
 pub enum ExtiEvent {
-    Gpio(Gpio),
+    Gpio(Pin),
     Pvd,
     RtcAlarm,
     UsbWakeup,
@@ -20,9 +26,9 @@ pub enum ExtiEvent {
 }
 #[derive(Eq, Clone, Copy)]
 pub struct Gpio {
-    pub id: Pin,
-    pub direction: Direction,
-    pub mode: PinMode,
+    id: Pin,
+    direction: Direction,
+    mode: PinMode,
 }
 
 #[derive(Eq, PartialEq, Clone, Copy)]
@@ -42,158 +48,84 @@ pub enum PinMode {
     PushPull,
 }
 
-pub static mut GPIOS: Gpios = Gpios::new();
-
-/// Intended to be a singleton
 pub struct Gpios {
-    pub analog: BTreeMap<Pin, Pxx<Analog>>,
-    pub alternat_push_pull: BTreeMap<Pin, Pxx<Alternate<PushPull>>>,
-    pub alternat_open_drain: BTreeMap<Pin, Pxx<Alternate<OpenDrain>>>,
-    pub input_floating: BTreeMap<Pin, Pxx<Input<Floating>>>,
-    pub input_pull_up: BTreeMap<Pin, Pxx<Input<PullUp>>>,
-    pub input_pull_down: BTreeMap<Pin, Pxx<Input<PullDown>>>,
-    pub output_open_drain: BTreeMap<Pin, Pxx<Output<OpenDrain>>>,
-    pub output_push_pull: BTreeMap<Pin, Pxx<Output<PushPull>>>,
+    input: BTreeMap<Gpio, Box<dyn InputPin>>,
+    output: BTreeMap<Gpio, Box<dyn OutputPin>>,
 }
 
 impl Gpios {
-    pub const fn new() -> Self {
-        Self {
-            analog: BTreeMap::new(),
-            alternat_push_pull: BTreeMap::new(),
-            alternat_open_drain: BTreeMap::new(),
-            input_floating: BTreeMap::new(),
-            input_pull_up: BTreeMap::new(),
-            input_pull_down: BTreeMap::new(),
-            output_open_drain: BTreeMap::new(),
-            output_push_pull: BTreeMap::new(),
-        }
-    }
-    fn get_exti_pin(&mut self, gpio: &Gpio) -> Result<&mut dyn ExtiPin, ResourceError> {
-        match &gpio.direction {
-            Direction::Input => {
-                let pin: &mut dyn ExtiPin = match &gpio.mode {
-                    PinMode::PullUp => unsafe {
-                        GPIOS
-                            .input_pull_up
-                            .get_mut(&gpio.id)
-                            .ok_or(ResourceError::NotFound)?
-                    },
-                    PinMode::PullDown => unsafe {
-                        GPIOS
-                            .input_pull_down
-                            .get_mut(&gpio.id)
-                            .ok_or(ResourceError::NotFound)?
-                    },
-                    PinMode::Floating => unsafe {
-                        GPIOS
-                            .input_floating
-                            .get_mut(&gpio.id)
-                            .ok_or(ResourceError::NotFound)?
-                    },
-                    _ => unreachable!(),
-                };
-                Ok(pin)
-            }
-            _ => Err(ResourceError::ConfigurationError),
+    const fn new() -> Self {
+        Gpios {
+            input: BTreeMap::new(),
+            output: BTreeMap::new(),
         }
     }
 }
-impl Gpio {
-    pub fn enable_interrupt(
-        &mut self,
-        afio: &mut stm32f1xx_hal::afio::Parts,
-    ) -> Result<(), ResourceError> {
-        let pxx = unsafe { GPIOS.get_exti_pin(self)? };
-        pxx.make_interrupt_source(afio);
-        Ok(())
-    }
-    pub fn disable_interrupt(
-        &mut self,
-        exti: &stm32f1xx_hal::device::EXTI,
-    ) -> Result<(), ResourceError> {
-        let pxx = unsafe { GPIOS.get_exti_pin(self)? };
-        pxx.disable_interrupt(exti);
-        Ok(())
-    }
+
+macro_rules! check_interrupt {
+    ($pinty:ty, $pinid:expr) => {
+        // We can just reinterpret a null-tuple because the underlying
+        // interrupt registers are determined by type.
+        // No actual data is involved
+        let mut pin = unsafe { core::mem::transmute::<(), $pinty>(()) };
+        if pin.check_interrupt() {
+            crate::events::push(
+                Event::ExternalInterrupt(ExtiEvent::Gpio($pinid)),
+                Priority::Critical,
+            )
+            .expect("filled event queue");
+            pin.clear_interrupt_pending_bit();
+        }
+    };
 }
-static mut EXTIPINS: BTreeSet<Gpio> = BTreeSet::new();
 
 /// Interrupt for GPIO Pin A0, B0 and C0
 #[interrupt]
 fn EXTI0() {
-    // Consider all possible pins for this EXTI source
-    for pin in unsafe { &mut EXTIPINS.iter() } {
-        // retrieve current bit from ``GPIOS``
-        let pxx = unsafe { GPIOS.get_exti_pin(pin).expect("Exti pin lookup error") };
-        // check pin for interrupt source
-        if pxx.check_interrupt() {
-            crate::events::push(
-                Event::ExternalInterrupt(ExtiEvent::Gpio(*pin)),
-                Priority::Critical,
-            )
-            .expect("filled event queue");
-            pxx.clear_interrupt_pending_bit();
-        }
-    }
+    check_interrupt!(gpioa::PA0<Input<Floating>>, Pin::PA0);
+    check_interrupt!(gpiob::PB0<Input<Floating>>, Pin::PB0);
+    check_interrupt!(gpioc::PC0<Input<Floating>>, Pin::PC0);
 }
 
 impl Resource for Gpio {
     fn read(&mut self, buf: &mut [u8]) -> nb::Result<usize, ResourceError> {
-        // FIXME: probably not thread safe
-        let gpio: &dyn InputPin<Error = Infallible> = match self.direction {
-            Direction::Input => match self.mode {
-                PinMode::PullUp => unsafe {
-                    GPIOS
-                        .input_pull_up
-                        .get(&self.id)
-                        .ok_or(ResourceError::NotFound)?
-                },
-                PinMode::PullDown => unsafe {
-                    GPIOS
-                        .input_pull_down
-                        .get(&self.id)
-                        .ok_or(ResourceError::NotFound)?
-                },
-                PinMode::Floating => unsafe {
-                    GPIOS
-                        .input_floating
-                        .get(&self.id)
-                        .ok_or(ResourceError::NotFound)?
-                },
-                _ => unreachable!(),
-            },
-            _ => return ResourceError::NonReadingResource.into(),
-        };
-        buf[0] = gpio.is_high().unwrap().into(); // infallible
+        match self.direction {
+            Direction::Input => {
+                if let Some(input_pin) = unsafe { GPIOS.input.get(self) } {
+                    buf[0] = input_pin.is_high().unwrap().into(); // infallible
+                } else {
+                    return ResourceError::NotFound.into();
+                }
+            }
+            Direction::Output => {
+                if let Some(output_pin) = unsafe { GPIOS.output.get(self) } {
+                    buf[0] = output_pin.is_set_high().unwrap().into(); // infallible
+                } else {
+                    return ResourceError::NotFound.into();
+                }
+            }
+            Direction::Alternate => unimplemented!(),
+        }
         Ok(1)
     }
     fn write(&mut self, buf: &[u8]) -> nb::Result<usize, ResourceError> {
-        let gpio: &mut dyn OutputPin<Error = Infallible> = match self.direction {
-            Direction::Output => match self.mode {
-                PinMode::OpenDrain => unsafe {
-                    GPIOS
-                        .output_open_drain
-                        .get_mut(&self.id)
-                        .ok_or(ResourceError::NotFound)?
-                },
-                PinMode::PushPull => unsafe {
-                    GPIOS
-                        .output_push_pull
-                        .get_mut(&self.id)
-                        .ok_or(ResourceError::NotFound)?
-                },
-                _ => unreachable!(),
-            },
-            _ => return ResourceError::NonReadingResource.into(),
-        };
-        for byte in buf {
-            match *byte != 0 {
-                true => gpio.set_high().unwrap(), // infallible
-                false => gpio.set_low().unwrap(), // infallible
+        match self.direction {
+            Direction::Output => {
+                if let Some(output_pin) = unsafe { GPIOS.output.get_mut(self) } {
+                    for byte in buf {
+                        match *byte != 0 {
+                            true => output_pin.set_high().unwrap(), // infallible
+                            false => output_pin.set_low().unwrap(), // infallible
+                        }
+                    }
+                    Ok(buf.len())
+                } else {
+                    ResourceError::NotFound.into()
+                }
             }
+            Direction::Input => ResourceError::NonWritingResource.into(),
+            Direction::Alternate => unimplemented!(),
         }
-        Ok(buf.len())
     }
     fn seek(&mut self, _: usize) -> nb::Result<(), ResourceError> {
         Ok(())
@@ -204,40 +136,53 @@ impl Resource for Gpio {
 }
 
 #[macro_export]
+macro_rules! init_gpio_generic {
+    ($channel:ident, $pin:ident, $control_reg:ident, $direction:ident, $mode:ident) => {
+        (
+            crate::device::stm32f1xx::Pin::$pin,
+            unsafe { core::mem::transmute::<(), stm32f1xx_hal::gpio::$channel::$control_reg>(()) },
+            unsafe {
+                core::mem::transmute::<(), stm32f1xx_hal::gpio::$channel::$pin<Input<$mode>>>(())
+            },
+        )
+    };
+}
+#[macro_export]
+macro_rules! init_gpio {
+    (pa0, input, floating) => {
+        init_gpio_generic!(gpioa, PA0, CRL, Input, Floating)
+    };
+}
+
+#[macro_export]
 macro_rules! build_gpio {
-    ($channel:ident, pa0, input, floating) => {{
-        use embedded_rust::device::stm32f1xx::*;
-        let pin = $channel.pa0.into_floating_input(&mut $channel.crl);
-        let id = Pin::PA0;
-        unsafe { GPIOS.input_floating.insert(id, pin.downgrade()) };
-        Gpio {
+    ($device: ident, pa0, input, floating) => {{
+            let (id, mut control_reg, pin) = init_gpio!(pa0, input, floating);
+        if $device.is_used_pin(id) {
+            panic!("multiple gpio creation")
+        };
+        let _ = pin.into_floating_input(&mut control_reg);
+        let gpio = Gpio {
             id,
-            mode: PinMode::Floating,
-            direction: Direction::Input,
-        }
+            mode: crate::device::stm32f1xx::PinMode::Floating,
+            direction: crate::device::stm32f1xx::Direction::Input,
+        };
+        $device.reserve_pin(id);
+        gpio
     }};
-    ($channel:ident, pa6, input, floating) => {{
-        use embedded_rust::device::stm32f1xx::*;
-        let pin = $channel.pa6.into_floating_input(&mut $channel.crl);
-        let id = Pin::PA6;
-        unsafe { GPIOS.input_floating.insert(id, pin.downgrade()) };
-        Gpio {
-            id,
-            mode: PinMode::Floating,
-            direction: Direction::Input,
+}
+impl Gpio {
+    fn new(pin: Pin, direction: Direction, mode: PinMode) -> Self {
+        let gpio = Gpio {
+            id: pin,
+            direction,
+            mode,
+        };
+        match pin{
+            (Pin::PA0, Direction::Input, PinMode::Floating) =>
         }
-    }};
-    ($channel:ident, pa7, input, floating) => {{
-        use embedded_rust::device::stm32f1xx::*;
-        let pin = $channel.pa7.into_floating_input(&mut $channel.crl);
-        let id = Pin::PA7;
-        unsafe { GPIOS.input_floating.insert(id, pin.downgrade()) };
-        Gpio {
-            id,
-            mode: PinMode::Floating,
-            direction: Direction::Input,
-        }
-    }};
+        gpio
+    }
 }
 
 impl Ord for Gpio {

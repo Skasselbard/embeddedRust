@@ -15,14 +15,12 @@ use cortex_m_rt::entry;
 use cortex_m_semihosting::hprintln;
 use stm32f1xx_hal::gpio::*;
 use stm32f1xx_hal::{
-    adc,
-    device::interrupt,
-    pac,
+    adc, pac,
     prelude::*,
     timer::{Tim2NoRemap, Timer},
 };
 
-use embedded_rust::device::{self, stm32f1xx::Gpio};
+use embedded_rust::device::*;
 use embedded_rust::*;
 
 pub const HEAP_START: usize = 0x2000_0000;
@@ -38,35 +36,25 @@ fn panic(info: &PanicInfo) -> ! {
 // static mut x: usize = 0;
 #[entry]
 fn main() -> ! {
-    // initialization phase
-    let p = pac::Peripherals::take().unwrap();
-    // let cp = cortex_m::peripheral::Peripherals::take().unwrap();
-    let mut flash = p.FLASH.constrain();
-    let mut rcc = p.RCC.constrain();
-    let clocks = rcc.cfgr.freeze(&mut flash.acr);
-
-    let mut gpioa = p.GPIOA.split(&mut rcc.apb2);
-    let mut gpiob = p.GPIOB.split(&mut rcc.apb2);
-    let mut afio = p.AFIO.constrain(&mut rcc.apb2);
-
     let mut runtime = Runtime::init(HEAP_START, HEAP_SIZE, 32).unwrap();
+    // TODO: make hardware initialization part of the device!!
+    let mut device = Device::new();
+    device.set_up_gpio(Pin::PA1, Direction::Input, PinMode::PullDown);
     // let mut usart1 = usart1!(gpioa, p, rcc, afio, clocks);
-    let mut pwm = pwm_tim2!(gpioa, p, rcc, afio, clocks, gpioa.pa0);
+    //let mut pwm = pwm_tim2!(gpioa, p, rcc, afio, clocks, gpioa.pa0);
     // let (mut adc, mut channels) = adc1!(gpioa, p, rcc, clocks, gpioa.pa7);
     // let id = runtime.add_resource(nom_uri::Uri::parse("bus:uart/1").unwrap(), &mut usart1);
     // runtime.associate_interrupt(id, DeviceInterrupt::USART1);
 
-    let mut gpio = build_gpio!(gpioa, pa6, input, floating);
+    let mut gpio = build_gpio!(device, pa0, input, floating);
     gpio.enable_interrupt(&mut afio);
 
     let mut task = example_task();
     runtime.spawn_task(Task::new(task), 0);
-    runtime.run()
+    runtime.run(device)
 }
 
-async fn switch_pwm(){
-
-}
+async fn switch_pwm() {}
 
 async fn async_number() -> u32 {
     42

@@ -10,7 +10,7 @@ pub mod stm32f1xx;
 
 // reexports of internal types
 #[cfg(feature = "stm32f1xx")]
-pub use stm32f1xx::{ExtiEvent, Gpio, Pin};
+pub use stm32f1xx::{Device, Direction, ExtiEvent, Gpio, Pin, PinMode};
 
 // reexports of external types
 #[cfg(feature = "stm32f1xx")]

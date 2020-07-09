@@ -1,5 +1,7 @@
 #![no_std]
 #![feature(const_btree_new)]
+#![feature(option_expect_none)]
+#![feature(const_fn)]
 extern crate alloc;
 
 #[macro_use]
@@ -129,7 +131,8 @@ impl<'device> Runtime<'device> {
     fn init_heap(heap_bottom: usize, heap_size: usize) {
         unsafe { ALLOCATOR.lock().init(heap_bottom, heap_size) };
     }
-    pub fn run(&mut self) -> ! {
+    pub fn run(&mut self, device: crate::device::Device) -> ! {
+        // TODO: create resources from device
         loop {
             while let Some(event) = events::next() {
                 self.handle_event(event);

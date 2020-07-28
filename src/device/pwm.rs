@@ -1,4 +1,4 @@
-use super::{ByteWriter, Resource, ResourceError};
+use embedded_rust_devices::{ByteWriter, Resource, ResourceError};
 use core::fmt::Write;
 
 use embedded_hal::PwmPin;

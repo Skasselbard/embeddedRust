@@ -1,8 +1,8 @@
 use crate::device::ExtiEvent;
-use crate::resources::ResourceError;
 use crate::DeviceInterrupt;
 use conquer_once::spin::OnceCell;
 use crossbeam_queue::{ArrayQueue, PushError};
+use embedded_rust_devices::ResourceError;
 
 pub enum Priority {
     /// priority 0: System Errors, Faults etc

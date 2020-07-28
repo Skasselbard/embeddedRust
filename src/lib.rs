@@ -13,7 +13,6 @@ pub mod device;
 pub(crate) mod events;
 mod executor;
 pub mod io;
-pub mod resources;
 pub mod schemes;
 
 #[global_allocator]
@@ -28,21 +27,16 @@ use core::{
     task::{Context, Poll},
 };
 pub use device::DeviceInterrupt;
+use embedded_rust_devices::{ComponentConfiguration, Resource, ResourceID};
 use nom_uri::Uri;
-pub use resources::{Resource, ResourceID};
 
 pub struct Task {
     future: Pin<Box<dyn Future<Output = ()>>>,
 }
 
-/// Max allowed elements in resource list.
-/// ['ResourceID'] only backs values up to 255
-// pub type ResourceCount = U32;
-
 pub struct Runtime<'device> {
     resource_ids: BTreeMap<Uri<'device>, ResourceID>,
     resources: Vec<&'device mut dyn Resource>,
-    associated_interrupts: Vec<alloc::vec::Vec<DeviceInterrupt>>,
     executor: executor::Executor,
 }
 
@@ -55,10 +49,12 @@ pub enum RuntimeError {
 }
 
 impl<'device> Runtime<'device> {
-    pub fn init(
+    pub fn init<F: FnOnce()>(
         heap_bottom: usize,
         heap_size: usize,
         max_events_per_prio: usize,
+        resource_configuration: &[ComponentConfiguration],
+        init_closure: F,
     ) -> Result<Self, RuntimeError> {
         Self::init_heap(heap_bottom, heap_size);
         events::ERROR_QUEUE
@@ -70,12 +66,14 @@ impl<'device> Runtime<'device> {
         events::NORMAL_QUEUE
             .try_init_once(|| crossbeam_queue::ArrayQueue::new(max_events_per_prio))
             .or_else(|_| Err(RuntimeError::MultipleInitializations))?;
-        Ok(Self {
+        let mut rt = Self {
             resources: Vec::with_capacity(32),
             resource_ids: BTreeMap::new(),
-            associated_interrupts: Vec::with_capacity(8),
             executor: executor::Executor::new(),
-        })
+        };
+        rt.configure(resource_configuration);
+        init_closure();
+        Ok(rt)
     }
     pub fn get_resource<'uri: 'device>(
         &mut self,
@@ -107,22 +105,7 @@ impl<'device> Runtime<'device> {
         let id = self.resources.len();
         self.resources.push(resource);
         self.resource_ids.insert(uri, ResourceID(id as u8));
-        self.associated_interrupts
-            .push(alloc::vec::Vec::with_capacity(0));
         ResourceID(id as u8)
-    }
-    pub fn associate_interrupt(
-        &mut self,
-        resource: ResourceID,
-        interrupt: DeviceInterrupt,
-    ) -> Result<(), RuntimeError> {
-        match self.associated_interrupts.get_mut(resource.0 as usize) {
-            Some(vector) => {
-                vector.push(interrupt);
-                Ok(())
-            }
-            None => Err(RuntimeError::ResourceNotFound),
-        }
     }
     /// Creates a new heap with the given bottom and size. The bottom address must be
     /// valid and the memory in the [heap_bottom, heap_bottom + heap_size) range must not
@@ -131,14 +114,13 @@ impl<'device> Runtime<'device> {
     fn init_heap(heap_bottom: usize, heap_size: usize) {
         unsafe { ALLOCATOR.lock().init(heap_bottom, heap_size) };
     }
-    pub fn run(&mut self, device: crate::device::Device) -> ! {
-        // TODO: create resources from device
+    pub fn run(&mut self) -> ! {
         loop {
             while let Some(event) = events::next() {
                 self.handle_event(event);
             }
             // TODO: ? waker checken ?
-            // TODO: do something  eith the result!
+            // TODO: do something  with the result!
             self.executor.run();
             cortex_m::asm::wfi(); // safe power till next interrupt
         }
@@ -151,6 +133,7 @@ impl<'device> Runtime<'device> {
             _ => unimplemented!(),
         }
     }
+    fn configure(&mut self, configuration: &[ComponentConfiguration]) {}
 }
 
 impl Task {

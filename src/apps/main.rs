@@ -36,22 +36,20 @@ fn panic(info: &PanicInfo) -> ! {
 // static mut x: usize = 0;
 #[entry]
 fn main() -> ! {
-    let mut runtime = Runtime::init(HEAP_START, HEAP_SIZE, 32).unwrap();
-    // TODO: make hardware initialization part of the device!!
-    let mut device = Device::new();
-    device.set_up_gpio(Pin::PA1, Direction::Input, PinMode::PullDown);
-    // let mut usart1 = usart1!(gpioa, p, rcc, afio, clocks);
-    //let mut pwm = pwm_tim2!(gpioa, p, rcc, afio, clocks, gpioa.pa0);
-    // let (mut adc, mut channels) = adc1!(gpioa, p, rcc, clocks, gpioa.pa7);
-    // let id = runtime.add_resource(nom_uri::Uri::parse("bus:uart/1").unwrap(), &mut usart1);
-    // runtime.associate_interrupt(id, DeviceInterrupt::USART1);
+    // let mut runtime = Runtime::init(HEAP_START, HEAP_SIZE, 32).unwrap();
+    // // let mut usart1 = usart1!(gpioa, p, rcc, afio, clocks);
+    // //let mut pwm = pwm_tim2!(gpioa, p, rcc, afio, clocks, gpioa.pa0);
+    // // let (mut adc, mut channels) = adc1!(gpioa, p, rcc, clocks, gpioa.pa7);
+    // // let id = runtime.add_resource(nom_uri::Uri::parse("bus:uart/1").unwrap(), &mut usart1);
+    // // runtime.associate_interrupt(id, DeviceInterrupt::USART1);
 
-    let mut gpio = build_gpio!(device, pa0, input, floating);
-    gpio.enable_interrupt(&mut afio);
+    // // let mut gpio = build_gpio!(device, pa0, input, floating);
+    // // gpio.enable_interrupt(&mut afio);
 
-    let mut task = example_task();
-    runtime.spawn_task(Task::new(task), 0);
-    runtime.run(device)
+    // let mut task = example_task();
+    // runtime.spawn_task(Task::new(task), 0);
+    // runtime.run()
+    loop {}
 }
 
 async fn switch_pwm() {}

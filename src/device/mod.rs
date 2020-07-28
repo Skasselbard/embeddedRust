@@ -1,16 +1,9 @@
-use super::resources::*;
-
 pub mod pwm;
 pub mod usart;
 
-// macro export
-#[cfg(feature = "stm32f1xx")]
-#[macro_use]
-pub mod stm32f1xx;
-
 // reexports of internal types
 #[cfg(feature = "stm32f1xx")]
-pub use stm32f1xx::{Device, Direction, ExtiEvent, Gpio, Pin, PinMode};
+pub use embedded_rust_devices::{Direction, ExtiEvent, Gpio, Pin, PinMode};
 
 // reexports of external types
 #[cfg(feature = "stm32f1xx")]

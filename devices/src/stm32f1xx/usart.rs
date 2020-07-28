@@ -1,6 +1,3 @@
-use crate::device::DeviceInterrupt;
-use crate::events::{Event, Priority};
-use crate::RuntimeError;
 use crossbeam_queue::ArrayQueue;
 use embedded_hal::serial::{Read, Write};
 use stm32f1xx_hal::device::{interrupt, USART1};
@@ -10,21 +7,21 @@ pub const QUEUE_LENGTH: usize = 32;
 // pub static mut USART1_OBJ: Option<Usart<USART1>> = None;
 static mut USART1_SINGLTN: Option<(Rx<USART1>, ArrayQueue<Result<u8, serial::Error>>)> = None;
 
-#[interrupt]
-fn USART1() {
-    let usart = unsafe {
-        USART1_SINGLTN
-            .as_mut()
-            .expect("acces to uninitialized usart1")
-    };
-    let byte = block!(usart.0.read()); // should not block because we are in rdy interrupt
-    usart.1.push(byte).expect("usart1: buffer filled");
-    crate::events::push(
-        Event::DeviceInterrupt(DeviceInterrupt::USART1),
-        Priority::Critical,
-    )
-    .expect("filled event queue");
-}
+// #[interrupt]
+// fn USART1() {
+//     let usart = unsafe {
+//         USART1_SINGLTN
+//             .as_mut()
+//             .expect("acces to uninitialized usart1")
+//     };
+//     let byte = block!(usart.0.read()); // should not block because we are in rdy interrupt
+//     usart.1.push(byte).expect("usart1: buffer filled");
+//     crate::events::push(
+//         Event::DeviceInterrupt(DeviceInterrupt::USART1),
+//         Priority::Critical,
+//     )
+//     .expect("filled event queue");
+// }
 
 /// ``Bus`` has to be some usart type from stm32f1xx_hal::stm32::USARTx
 pub struct Usart<Bus> {
@@ -58,20 +55,20 @@ where
     }
 }
 
-impl Usart<USART1> {
-    pub fn new(tx: Tx<USART1>, rx: Rx<USART1>) -> Result<Self, RuntimeError> {
-        unsafe {
-            match USART1_SINGLTN {
-                Some(_) => return Err(RuntimeError::MultipleInitializations),
-                None => USART1_SINGLTN = Some((rx, ArrayQueue::new(QUEUE_LENGTH))),
-            }
-        };
-        Ok(Self {
-            tx,
-            buffer: unsafe { &USART1_SINGLTN.as_ref().unwrap().1 }, // just initialized
-        })
-    }
-}
+// impl Usart<USART1> {
+//     pub fn new(tx: Tx<USART1>, rx: Rx<USART1>) -> Result<Self, RuntimeError> {
+//         unsafe {
+//             match USART1_SINGLTN {
+//                 Some(_) => return Err(RuntimeError::MultipleInitializations),
+//                 None => USART1_SINGLTN = Some((rx, ArrayQueue::new(QUEUE_LENGTH))),
+//             }
+//         };
+//         Ok(Self {
+//             tx,
+//             buffer: unsafe { &USART1_SINGLTN.as_ref().unwrap().1 }, // just initialized
+//         })
+//     }
+// }
 
 /// usart with default values
 /// Pins: PA9, PA10

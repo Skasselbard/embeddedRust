@@ -5,6 +5,9 @@ edition = "2018"
 name = "embedded_rust"
 version = "0.2.0"
 
+[workspace]
+members = ["embedded_rust_macros", "devices"]
+
 [dependencies]
 cortex-m = "0.6.2"
 cortex-m-rt = "0.6.12"
@@ -20,6 +23,9 @@ log = "0.4.8"
 crossbeam-queue = {version = "0.2.1", default-features = false, features = ["alloc"]}
 # static initialization
 conquer-once = {version = "0.2.0", default-features = false}
+embedded_rust_devices = {path = "./devices"}
+# TODO: could be a bin dependency https://github.com/rust-lang/cargo/issues/1982
+embedded_rust_macros = {path = "./embedded_rust_macros"}
 
 # [profile.dev]
 # panic = "abort"
@@ -50,11 +56,11 @@ name = "main"
 path = "src/apps/main.rs"
 test = false
 
-# [[bin]]
-# name="dimmer"
-# path="src/dimmer.rs"
-# test = false
-# bench = false
+[[bin]]
+bench = false
+name = "proc"
+path = "src/apps/proc_macro_test.rs"
+test = false
 
 [features]
 default = ["stm32f1xx"]

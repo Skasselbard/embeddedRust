@@ -1,4 +1,4 @@
-use super::{Resource, ResourceError};
+use embedded_rust_devices::{Resource, ResourceError};
 use log::error;
 
 use embedded_hal::serial::{Read, Write};

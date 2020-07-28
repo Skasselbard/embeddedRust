@@ -1,3 +1,12 @@
+use super::ComponentConfiguration;
+
+#[macro_export]
+macro_rules! register_components{
+    () => {
+        
+    };
+}
+
 #[derive(Copy, Clone, PartialEq, Eq, Debug, Hash)]
 pub struct ResourceID(pub u8);
 
@@ -12,6 +21,10 @@ pub enum ResourceError {
     NotFound,
     /// The resource is ill configured for the desired task
     ConfigurationError,
+}
+
+pub trait RegisterComponent {
+    fn register_component(self, configuration: ComponentConfiguration);
 }
 
 #[allow(unused)]

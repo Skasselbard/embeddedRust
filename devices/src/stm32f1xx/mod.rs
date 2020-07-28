@@ -1,9 +1,9 @@
-
 #[macro_use]
 mod usart;
 mod gpio;
 mod pwm;
 pub use gpio::*;
+use nom_uri::{ToUri, Uri};
 pub use pwm::*;
 use stm32f1xx_hal::device::USART1;
 use stm32f1xx_hal::serial::{Event, Serial};
@@ -27,6 +27,10 @@ pub enum ComponentConfiguration {
     Pwm,
 }
 
+pub struct GpioConfig{
+    
+}
+
 /// Pin ID
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct Pin {
@@ -43,6 +47,15 @@ impl Pin {
     }
     pub fn port(&self) -> Port {
         self.port
+    }
+}
+
+impl<'uri> ToUri<'uri> for ComponentConfiguration {
+    fn to_uri(&self, buffer: &'uri mut str) -> nom_uri::Uri<'uri> {
+        match self {
+            ComponentConfiguration::Gpio(gpio) => gpio.to_uri(buffer),
+            _ => unimplemented!(),
+        }
     }
 }
 

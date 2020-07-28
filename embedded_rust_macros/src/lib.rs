@@ -1,5 +1,5 @@
 mod gpio;
-use embedded_rust_devices::Gpio;
+use embedded_rust_devices::{Gpio, TriggerEdge};
 use proc_macro::TokenStream;
 use quote::{format_ident, ToTokens};
 use serde_derive::Deserialize;
@@ -41,7 +41,7 @@ fn parse_json(attributes: &TokenStream) -> Device {
     serde_json::from_str(&attributes.to_string()).expect("ParsingError")
 }
 
-fn generate_component_config_array(gpios: &Vec<(Gpio, Option<gpio::TriggerEdge>)>) -> Vec<Stmt> {
+fn generate_component_config_array(gpios: &Vec<Gpio>) -> Vec<Stmt> {
     let (gpio_configs, gpios) = gpio::generate_components(gpios);
     parse_quote!(
         let init_closure = ||{

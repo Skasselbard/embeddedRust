@@ -1,11 +1,5 @@
 use super::ComponentConfiguration;
-
-#[macro_export]
-macro_rules! register_components{
-    () => {
-        
-    };
-}
+use nom_uri::{ToUri, Uri};
 
 #[derive(Copy, Clone, PartialEq, Eq, Debug, Hash)]
 pub struct ResourceID(pub u8);
@@ -37,6 +31,7 @@ pub trait Resource {
     }
     fn seek(&mut self, pos: usize) -> nb::Result<(), ResourceError>;
     fn flush(&mut self) -> nb::Result<(), ResourceError>;
+    fn to_uri<'uri>(&self, buffer: &'uri mut str) -> Uri<'uri>;
 }
 
 impl From<core::num::ParseFloatError> for ResourceError {
@@ -59,6 +54,9 @@ pub struct ByteWriter<'a> {
     buffer: &'a mut [u8],
     cursor: usize,
 }
+pub struct StrWriter<'a> {
+    byte_writer: ByteWriter<'a>,
+}
 impl<'a> ByteWriter<'a> {
     pub fn new(buffer: &'a mut [u8]) -> Self {
         Self { buffer, cursor: 0 }
@@ -69,6 +67,19 @@ impl<'a> ByteWriter<'a> {
     }
     pub fn written(&self) -> usize {
         self.cursor
+    }
+}
+impl<'a> StrWriter<'a> {
+    pub fn new(buffer: &'a mut str) -> Self {
+        Self {
+            byte_writer: ByteWriter::new(unsafe { buffer.as_bytes_mut() }),
+        }
+    }
+    pub fn buffer(self) -> Result<&'a mut str, core::str::Utf8Error> {
+        core::str::from_utf8_mut(self.byte_writer.buffer())
+    }
+    pub fn written(&self) -> usize {
+        self.byte_writer.written()
     }
 }
 impl<'a> core::fmt::Write for ByteWriter<'a> {
@@ -86,6 +97,11 @@ impl<'a> core::fmt::Write for ByteWriter<'a> {
         }
     }
 }
+impl<'a> core::fmt::Write for StrWriter<'a> {
+    fn write_str(&mut self, s: &str) -> core::fmt::Result {
+        self.byte_writer.write_str(s)
+    }
+}
 impl<'buf> From<&'buf mut [u8]> for ByteWriter<'buf> {
     fn from(buffer: &'buf mut [u8]) -> Self {
         Self::new(buffer)
@@ -94,5 +110,10 @@ impl<'buf> From<&'buf mut [u8]> for ByteWriter<'buf> {
 impl<'buf> From<&'buf mut str> for ByteWriter<'buf> {
     fn from(buffer: &'buf mut str) -> Self {
         Self::new(unsafe { buffer.as_bytes_mut() })
+    }
+}
+impl<'buf> From<&'buf mut str> for StrWriter<'buf> {
+    fn from(buffer: &'buf mut str) -> Self {
+        Self::new(buffer)
     }
 }

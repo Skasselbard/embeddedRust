@@ -5,9 +5,6 @@
 extern crate alloc;
 
 #[macro_use]
-extern crate nb;
-
-#[macro_use]
 pub mod device;
 
 pub(crate) mod events;
@@ -19,7 +16,7 @@ pub mod schemes;
 static ALLOCATOR: linked_list_allocator::LockedHeap = linked_list_allocator::LockedHeap::empty();
 
 use alloc::boxed::Box;
-use alloc::collections::BTreeMap;
+use alloc::string::String;
 use alloc::vec::Vec;
 use core::{
     future::Future,
@@ -34,10 +31,12 @@ pub struct Task {
     future: Pin<Box<dyn Future<Output = ()>>>,
 }
 
-pub struct Runtime<'device> {
-    resource_ids: BTreeMap<Uri<'device>, ResourceID>,
-    resources: Vec<&'device mut dyn Resource>,
+pub struct Runtime {
+    // resource_ids: BTreeMap<Uri<>, ResourceID)>,
+    resources: Vec<Box<dyn Resource>>,
     executor: executor::Executor,
+    //TODO: implement callbacks (observer pattern?)
+    // event_callbacks: BTreeMap<Event, Task>
 }
 
 #[non_exhaustive]
@@ -48,7 +47,7 @@ pub enum RuntimeError {
     TaskQueueIsFull,
 }
 
-impl<'device> Runtime<'device> {
+impl Runtime {
     pub fn init<F: FnOnce()>(
         heap_bottom: usize,
         heap_size: usize,
@@ -67,44 +66,37 @@ impl<'device> Runtime<'device> {
             .try_init_once(|| crossbeam_queue::ArrayQueue::new(max_events_per_prio))
             .or_else(|_| Err(RuntimeError::MultipleInitializations))?;
         let mut rt = Self {
-            resources: Vec::with_capacity(32),
-            resource_ids: BTreeMap::new(),
+            resources: Vec::with_capacity(resource_configuration.len()),
             executor: executor::Executor::new(),
         };
         rt.configure(resource_configuration);
         init_closure();
         Ok(rt)
     }
-    pub fn get_resource<'uri: 'device>(
-        &mut self,
-        id: ResourceID,
-    ) -> Result<(ResourceID, &mut dyn Resource), RuntimeError> {
-        Ok((
-            id,
-            *self
-                .resources
-                .get_mut(id.0 as usize)
-                .expect("Resource id not found in vector"),
-        ))
+    pub fn get_resource(&mut self, id: &ResourceID) -> Result<&mut dyn Resource, RuntimeError> {
+        Ok(self
+            .resources
+            .get_mut(id.0 as usize)
+            .expect("Resource id not found in vector")
+            .as_mut())
     }
-    pub fn get_resource_from_uri<'uri: 'device>(
-        &mut self,
-        uri: &'uri Uri,
-    ) -> Result<(ResourceID, &mut dyn Resource), RuntimeError> {
-        let id = *match self.resource_ids.get_mut(uri) {
-            Some(id) => id,
-            None => return Err(RuntimeError::ResourceNotFound),
-        };
-        self.get_resource(id)
+    pub fn get_resource_id<'uri>(&mut self, uri: &'uri Uri) -> Result<ResourceID, RuntimeError> {
+        let mut id = None;
+        let mut buffer = String::new();
+        for i in 0..self.resources.len() {
+            if &self.resources[i].to_uri(&mut buffer) == uri {
+                id = Some(ResourceID(i as u8));
+                break;
+            }
+        }
+        match id {
+            Some(id) => Ok(id),
+            None => Err(RuntimeError::ResourceNotFound),
+        }
     }
-    pub fn add_resource<'uri: 'device>(
-        &mut self,
-        uri: Uri<'uri>,
-        resource: &'device mut dyn Resource,
-    ) -> ResourceID {
+    pub fn add_resource(&mut self, resource: Box<dyn Resource>) -> ResourceID {
         let id = self.resources.len();
         self.resources.push(resource);
-        self.resource_ids.insert(uri, ResourceID(id as u8));
         ResourceID(id as u8)
     }
     /// Creates a new heap with the given bottom and size. The bottom address must be
@@ -133,7 +125,15 @@ impl<'device> Runtime<'device> {
             _ => unimplemented!(),
         }
     }
-    fn configure(&mut self, configuration: &[ComponentConfiguration]) {}
+    fn configure(&mut self, configurations: &[ComponentConfiguration]) {
+        for configuration in configurations {
+            let resource: Box<dyn Resource> = match configuration {
+                ComponentConfiguration::Gpio(gpio) => Box::new(gpio.clone()),
+                _ => unimplemented!(),
+            };
+            self.add_resource(resource);
+        }
+    }
 }
 
 impl Task {

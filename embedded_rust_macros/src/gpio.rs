@@ -1,6 +1,6 @@
 use embedded_rust_devices::*;
 use quote::format_ident;
-use syn::{parse_quote, Stmt};
+use syn::{parse_quote, parse_str, Expr, Stmt};
 
 /// keywords to build the correct lines of gpio code
 struct GpioKeys {
@@ -11,14 +11,8 @@ struct GpioKeys {
     pin_mode: String,
 }
 
-pub(crate) enum TriggerEdge {
-    Rising,
-    Falling,
-    All,
-}
-
 /// parse json to internal structures
-pub(crate) fn parse(gpio_list: Vec<Vec<String>>) -> Vec<(Gpio, Option<TriggerEdge>)> {
+pub(crate) fn parse(gpio_list: Vec<Vec<String>>) -> Vec<Gpio> {
     let mut parsed_gpio_list = Vec::new();
     for gpio in gpio_list {
         parsed_gpio_list.push(parse_gpio(gpio));
@@ -27,20 +21,18 @@ pub(crate) fn parse(gpio_list: Vec<Vec<String>>) -> Vec<(Gpio, Option<TriggerEdg
 }
 
 /// gpio code generation
-pub(crate) fn generate(gpio_list: Vec<(Gpio, Option<TriggerEdge>)>) -> Vec<Stmt> {
+pub(crate) fn generate(gpio_list: Vec<Gpio>) -> Vec<Stmt> {
     let mut stmts = channel_init_statements(&gpio_list);
-    for (gpio, trigger_edge) in gpio_list {
-        stmts.append(&mut generate_gpio(gpio, trigger_edge));
+    for gpio in gpio_list {
+        stmts.append(&mut generate_gpio(gpio));
     }
     stmts
 }
 
-pub(crate) fn generate_components(
-    gpio_list: &Vec<(Gpio, Option<TriggerEdge>)>,
-) -> (Vec<syn::Expr>, Vec<syn::Expr>) {
+pub(crate) fn generate_components(gpio_list: &Vec<Gpio>) -> (Vec<syn::Expr>, Vec<syn::Expr>) {
     let mut configs = Vec::new();
     let mut identifiers = Vec::new();
-    for (gpio, _) in gpio_list {
+    for gpio in gpio_list {
         let channel = match gpio.channel() {
             Channel::A => format_ident!("A"),
             Channel::B => format_ident!("B"),
@@ -54,10 +46,19 @@ pub(crate) fn generate_components(
             format_ident!("P{}", port_to_string(gpio.port()))
         };
         let direction = match gpio.direction() {
-            Direction::Alternate => format_ident!("Alternate"),
-            Direction::Input => format_ident!("Input"),
-            Direction::Output => format_ident!("Output"),
-        };
+            Direction::Alternate => parse_str::<Expr>("Alternate"),
+            Direction::Input(edge) => parse_str::<Expr>(&format!(
+                "Input({})",
+                match edge {
+                    Some(TriggerEdge::All) => "Some(TriggerEdge::All)",
+                    Some(TriggerEdge::Falling) => "Some(TriggerEdge::Falling)",
+                    Some(TriggerEdge::Rising) => "Some(TriggerEdge::Rising)",
+                    None => "None",
+                }
+            )),
+            Direction::Output => parse_str::<Expr>("Output"),
+        }
+        .unwrap();
         let mode = match gpio.mode() {
             PinMode::Analog => format_ident!("Analog"),
             PinMode::Floating => format_ident!("Floating"),
@@ -78,11 +79,11 @@ pub(crate) fn generate_components(
 }
 
 /// build the statements to initialize the gpio channels
-fn channel_init_statements(gpio_list: &Vec<(Gpio, Option<TriggerEdge>)>) -> Vec<Stmt> {
+fn channel_init_statements(gpio_list: &Vec<Gpio>) -> Vec<Stmt> {
     use std::collections::HashSet;
     let mut channels = HashSet::with_capacity(5);
     let mut stmts = Vec::with_capacity(5);
-    for (gpio, _) in gpio_list {
+    for gpio in gpio_list {
         // only one initialization for each channel
         if !channels.contains(&gpio.channel()) {
             // remember initialized channel
@@ -104,7 +105,7 @@ fn channel_init_statements(gpio_list: &Vec<(Gpio, Option<TriggerEdge>)>) -> Vec<
     stmts
 }
 
-fn generate_gpio(gpio: Gpio, interrupt_edge: Option<TriggerEdge>) -> Vec<Stmt> {
+fn generate_gpio(gpio: Gpio) -> Vec<Stmt> {
     // The gpios differ in initialization, so we need to know which components we have to use
     let component_keys = to_component_keys(gpio);
     // build identifiers
@@ -130,23 +131,26 @@ fn generate_gpio(gpio: Gpio, interrupt_edge: Option<TriggerEdge>) -> Vec<Stmt> {
         let mut #pin_var_ident = #channel_ident.#pin_ident.#init_function_ident(&mut #channel_ident.#control_reg_ident);
     );
     // if the pin shall be an interrupt source, we need additional configuration
-    if let Some(edge) = interrupt_edge {
-        let peripherals_ident = format_ident!("{}", super::PERIPHERALS_KEY);
-        let edge_ident = match edge {
-            TriggerEdge::Rising => format_ident!("RISING"),
-            TriggerEdge::Falling => format_ident!("FALLING"),
-            TriggerEdge::All => format_ident!("RISING_FALLING"),
-        };
-        // expand:
-        // pin_pxy.make_interrupt_source(&mut afio);
-        // pin_pxy.trigger_on_edge(&peripherals.EXTI, Edge::EDGE_TYPE);
-        // pin_pxy.enable_interrupt(&peripherals.EXTI);
-        let mut interrupt_stmts: Vec<Stmt> = parse_quote!(
-            #pin_var_ident.make_interrupt_source(&mut afio);
-            #pin_var_ident.trigger_on_edge(&#peripherals_ident.EXTI, Edge::#edge_ident);
-            #pin_var_ident.enable_interrupt(&#peripherals_ident.EXTI);
-        );
-        stmts.append(&mut interrupt_stmts);
+    match gpio.direction() {
+        Direction::Input(Some(edge)) => {
+            let peripherals_ident = format_ident!("{}", super::PERIPHERALS_KEY);
+            let edge_ident = match edge {
+                TriggerEdge::Rising => format_ident!("RISING"),
+                TriggerEdge::Falling => format_ident!("FALLING"),
+                TriggerEdge::All => format_ident!("RISING_FALLING"),
+            };
+            // expand:
+            // pin_pxy.make_interrupt_source(&mut afio);
+            // pin_pxy.trigger_on_edge(&peripherals.EXTI, Edge::EDGE_TYPE);
+            // pin_pxy.enable_interrupt(&peripherals.EXTI);
+            let mut interrupt_stmts: Vec<Stmt> = parse_quote!(
+                #pin_var_ident.make_interrupt_source(&mut afio);
+                #pin_var_ident.trigger_on_edge(&#peripherals_ident.EXTI, Edge::#edge_ident);
+                #pin_var_ident.enable_interrupt(&#peripherals_ident.EXTI);
+            );
+            stmts.append(&mut interrupt_stmts);
+        }
+        _ => {}
     }
     stmts
 }
@@ -170,7 +174,7 @@ fn to_component_keys(gpio: Gpio) -> GpioKeys {
     .into();
     let direction: String = match gpio.direction() {
         Direction::Alternate => unimplemented!(),
-        Direction::Input => "input",
+        Direction::Input(_) => "input",
         Direction::Output => "output",
     }
     .into();
@@ -226,7 +230,7 @@ fn channel_to_string(channel: Channel) -> String {
 }
 
 /// converts the parsed json into the internally used data structures
-fn parse_gpio(gpio: Vec<String>) -> (Gpio, Option<TriggerEdge>) {
+fn parse_gpio(gpio: Vec<String>) -> Gpio {
     let mut mode = None;
     let mut direction = None;
     let mut id = None;
@@ -262,13 +266,17 @@ fn parse_gpio(gpio: Vec<String>) -> (Gpio, Option<TriggerEdge>) {
             }
         };
     }
+    let direction = match direction.expect("no valid direction specified") {
+        Direction::Input(_) => Direction::Input(trigger_edge),
+        x => x,
+    };
     let gpio = Gpio::new(
         id.expect("no valid pin specified"),
-        direction.expect("no valid direction specified"),
+        direction,
         mode.expect("no valid pin mode specified"),
     );
     check_validity(gpio);
-    (gpio, trigger_edge)
+    gpio
 }
 
 /// checks the configuration and panics if it is invalid
@@ -284,11 +292,10 @@ fn check_validity(gpio: Gpio) {
                 panic!("floating pins have to be input pins")
             }
         }
-        PinMode::OpenDrain => {
-            if gpio.direction() == Direction::Input {
-                panic!("open drain pins have to be output or alternate pins")
-            }
-        }
+        PinMode::OpenDrain => match gpio.direction() {
+            Direction::Input(_) => panic!("open drain pins have to be output or alternate pins"),
+            _ => {}
+        },
         PinMode::PullDown => {
             if gpio.direction() == Direction::Output || gpio.direction() == Direction::Alternate {
                 panic!("pull down pins have to be input pins")
@@ -299,11 +306,10 @@ fn check_validity(gpio: Gpio) {
                 panic!("pull up pins have to be input pins")
             }
         }
-        PinMode::PushPull => {
-            if gpio.direction() == Direction::Input {
-                panic!("open drain pins have to be output or alternate pins")
-            }
-        }
+        PinMode::PushPull => match gpio.direction() {
+            Direction::Input(_) => panic!("open drain pins have to be output or alternate pins"),
+            _ => {}
+        },
     }
 }
 
@@ -321,7 +327,7 @@ fn trigger_edge_from_key(key: &str) -> Option<TriggerEdge> {
 
 fn direction_from_key(key: &str) -> Option<Direction> {
     match key {
-        "input" | "Input" | "INPUT" | "in" | "IN" => Some(Direction::Input),
+        "input" | "Input" | "INPUT" | "in" | "IN" => Some(Direction::Input(None)),
         "output" | "Output" | "OUTPUT" | "out" | "OUT" => Some(Direction::Output),
         "alternate" | "Alternate" | "ALTERNATE" | "alt" | "ALT" => Some(Direction::Alternate),
         _ => None,

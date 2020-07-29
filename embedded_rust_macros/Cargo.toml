@@ -11,9 +11,9 @@ proc-macro = true
 
 [dependencies]
 # json = "0.12.4"
-embedded_rust_devices = {path = "../devices"}
+embedded_rust = {path = ".."}
 quote = "1.0.7"
 serde = "1.0.114"
 serde_derive = "1.0.114"
 serde_json = "1.0"
-syn = {version = "1.0.34", features = ["full"]}
+syn = {version = "1.0.36", features = ["full"]}

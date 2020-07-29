@@ -1,5 +1,5 @@
 use core::fmt::Write;
-use embedded_rust_devices::resources::{ByteWriter, Resource, ResourceError};
+// use embedded_rust_devices::resources::{ByteWriter, Resource, ResourceError};
 
 use embedded_hal::PwmPin;
 

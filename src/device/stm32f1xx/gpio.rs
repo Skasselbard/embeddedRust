@@ -1,5 +1,5 @@
 use super::{ComponentConfiguration, Pin};
-use crate::events::Event;
+use crate::events::{self, Event, Priority};
 use crate::resources::{RegisterComponent, Resource, ResourceError};
 use alloc::boxed::Box;
 use alloc::collections::{BTreeMap, BTreeSet};
@@ -23,7 +23,7 @@ pub trait OutputPin:
 
 #[derive(Copy, Clone, PartialEq, Eq, Debug)]
 pub enum ExtiEvent {
-    Gpio(Pin, bool),
+    Gpio(Pin),
     Pvd,
     RtcAlarm,
     UsbWakeup,
@@ -129,28 +129,28 @@ impl Gpios {
 
 //FIXME: handle interrrupts
 macro_rules! check_interrupt {
-    ($pinty:ty, $pinid:expr) => {
+    ($pinty:ty, $channel:expr, $port:expr) => {
         // We can just reinterpret a null-tuple because the underlying
         // interrupt registers are determined by type.
         // No actual data is involved
         let mut pin = unsafe { core::mem::transmute::<(), $pinty>(()) };
         if pin.check_interrupt() {
-            // crate::events::push(
-            //     Event::ExternalInterrupt(ExtiEvent::Gpio($pinid)),
-            //     Priority::Critical,
-            // )
-            // .expect("filled event queue");
+            let e = Event::ExternalInterrupt(ExtiEvent::Gpio(Pin {
+                channel: $channel,
+                port: $port,
+            }));
+            events::push(e, Priority::Critical).expect("filled event queue");
             pin.clear_interrupt_pending_bit();
         }
     };
 }
 
-/// Interrupt for GPIO Pin A0, B0 and C0
+// Interrupt for GPIO Pin A0, B0 and C0
 #[interrupt]
 fn EXTI0() {
-    check_interrupt!(gpioa::PA0<Input<Floating>>, Pin::PA0);
-    check_interrupt!(gpiob::PB0<Input<Floating>>, Pin::PB0);
-    check_interrupt!(gpioc::PC0<Input<Floating>>, Pin::PC0);
+    check_interrupt!(gpioa::PA0<Input<Floating>>, Channel::A, Port::P00);
+    check_interrupt!(gpiob::PB0<Input<Floating>>, Channel::B, Port::P00);
+    check_interrupt!(gpioc::PC0<Input<Floating>>, Channel::C, Port::P00);
 }
 
 //////////////////////////////////////////
@@ -166,7 +166,7 @@ where
             ComponentConfiguration::Gpio(gpio) => gpio,
             _ => panic!("gpio has non gpio configuration"),
         };
-        unsafe { GPIOS.input.insert(key, Box::new(self)) };
+        // unsafe { GPIOS.input.insert(key, Box::new(self)) };
     }
 }
 impl<Mode> RegisterComponent for Pxx<Output<Mode>>
@@ -178,7 +178,7 @@ where
             ComponentConfiguration::Gpio(gpio) => gpio,
             _ => panic!("gpio has non gpio configuration"),
         };
-        unsafe { GPIOS.output.insert(key, Box::new(self)) };
+        // unsafe { GPIOS.output.insert(key, Box::new(self)) };
     }
 }
 impl RegisterComponent for Pxx<Analog>

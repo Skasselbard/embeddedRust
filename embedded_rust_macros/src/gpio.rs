@@ -1,4 +1,4 @@
-use embedded_rust_devices::*;
+// use embedded_rust::device::stm32f1xx::{Channel, Direction, Gpio, Pin, PinMode, Port, TriggerEdge};
 use quote::format_ident;
 use syn::{parse_quote, parse_str, Expr, Stmt};
 
@@ -9,6 +9,109 @@ struct GpioKeys {
     control_reg: String,
     direction: String,
     pin_mode: String,
+}
+
+#[derive(Clone, Copy, Debug)]
+pub struct Gpio {
+    id: Pin,
+    direction: Direction,
+    mode: PinMode,
+}
+
+/// Pin ID
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub struct Pin {
+    channel: Channel,
+    port: Port,
+}
+
+impl Pin {
+    pub fn new(channel: Channel, port: Port) -> Self {
+        Self { channel, port }
+    }
+    pub fn channel(&self) -> Channel {
+        self.channel
+    }
+    pub fn port(&self) -> Port {
+        self.port
+    }
+}
+#[derive(PartialEq, Eq, Clone, Copy, Debug, PartialOrd, Ord, Hash)]
+pub enum Channel {
+    A,
+    B,
+    C,
+    D,
+    E,
+}
+
+#[derive(PartialEq, Eq, Clone, Copy, Debug, PartialOrd, Ord, Hash)]
+pub enum Port {
+    P00,
+    P01,
+    P02,
+    P03,
+    P04,
+    P05,
+    P06,
+    P07,
+    P08,
+    P09,
+    P10,
+    P11,
+    P12,
+    P13,
+    P14,
+    P15,
+}
+
+#[derive(Eq, PartialEq, Clone, Copy, Debug, Hash)]
+pub enum Direction {
+    Alternate,
+    Input(Option<TriggerEdge>),
+    Output,
+}
+
+#[derive(Eq, PartialEq, Clone, Copy, Debug, Hash)]
+pub enum TriggerEdge {
+    Rising,
+    Falling,
+    All,
+}
+
+#[derive(Eq, PartialEq, Clone, Copy, Debug, Hash)]
+pub enum PinMode {
+    Analog,
+    Floating,
+    OpenDrain,
+    PullDown,
+    PullUp,
+    PushPull,
+}
+
+impl Gpio {
+    pub fn new(pin: Pin, direction: Direction, mode: PinMode) -> Self {
+        Gpio {
+            id: pin,
+            direction,
+            mode,
+        }
+    }
+    pub fn id(&self) -> Pin {
+        self.id
+    }
+    pub fn channel(&self) -> Channel {
+        self.id.channel()
+    }
+    pub fn port(&self) -> Port {
+        self.id.port()
+    }
+    pub fn direction(&self) -> Direction {
+        self.direction
+    }
+    pub fn mode(&self) -> PinMode {
+        self.mode
+    }
 }
 
 /// parse json to internal structures

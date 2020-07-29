@@ -1,4 +1,4 @@
-use crate::{DeviceInterrupt, ExtiEvent};
+use crate::device::stm32f1xx::{DeviceInterrupt, ExtiEvent};
 use conquer_once::spin::OnceCell;
 use crossbeam_queue::{ArrayQueue, PushError};
 

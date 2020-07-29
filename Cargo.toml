@@ -1,30 +1,27 @@
 [package]
 authors = ["Tom Meyer <tom.meyer@uni-rostock.de>"]
-default-run = "main"
 edition = "2018"
 name = "embedded_rust"
 version = "0.2.0"
 
 [workspace]
-members = ["embedded_rust_macros", "devices"]
+members = ["embedded_rust_macros", "programs"]
 
 [dependencies]
-cortex-m = "0.6.2"
+cortex-m = "0.6.3"
 cortex-m-rt = "0.6.12"
-embedded-hal = {version = "0.2.3"}
+embedded-hal = {version = "0.2.4"}
+nb = "1.0.0"
 nom-uri = {git = "https://github.com/Skasselbard/nom-uri"}
-stm32f1xx-hal = {version = "0.5.3", features = ["stm32f103", "rt", "medium"]}
+stm32f1xx-hal = {version = "0.6.1", features = ["stm32f103", "rt", "medium"]}
 # nom-uri = { path = "../nom-uri"}
 cortex-m-semihosting = "0.3.5"
 linked_list_allocator = {version = "0.8.4"}
-log = "0.4.8"
+log = "0.4.11"
 # concurency safe data structures
-crossbeam-queue = {version = "0.2.1", default-features = false, features = ["alloc"]}
+crossbeam-queue = {version = "0.2.3", default-features = false, features = ["alloc"]}
 # static initialization
-conquer-once = {version = "0.2.0", default-features = false}
-embedded_rust_devices = {path = "./devices"}
-# TODO: could be a bin dependency https://github.com/rust-lang/cargo/issues/1982
-embedded_rust_macros = {path = "./embedded_rust_macros"}
+conquer-once = {version = "0.2.1", default-features = false}
 
 # [profile.dev]
 # panic = "abort"
@@ -47,18 +44,6 @@ opt-level = "z" # optimized for size
 [lib]
 bench = false
 path = "src/lib.rs"
-test = false
-
-[[bin]]
-bench = false
-name = "main"
-path = "src/apps/main.rs"
-test = false
-
-[[bin]]
-bench = false
-name = "proc"
-path = "src/apps/proc_macro_test.rs"
 test = false
 
 [features]

@@ -20,6 +20,8 @@ use stm32f1xx_hal::{
     timer::{Tim2NoRemap, Timer},
 };
 
+pub type DeviceInterrupt = stm32f1xx_hal::device::Interrupt;
+
 pub enum ComponentConfiguration {
     Clock,
     Gpio(Gpio),
@@ -27,9 +29,7 @@ pub enum ComponentConfiguration {
     Pwm,
 }
 
-pub struct GpioConfig{
-    
-}
+pub struct GpioConfig {}
 
 /// Pin ID
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]

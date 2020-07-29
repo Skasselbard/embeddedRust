@@ -1,0 +1,22 @@
+[package]
+authors = ["\"tom\" <\"tom.meyer89@gmail.com\">"]
+edition = "2018"
+name = "programs"
+version = "0.1.0"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+cortex-m = "0.6.3"
+cortex-m-rt = "0.6.12"
+cortex-m-semihosting = "0.3.5"
+embedded-hal = {version = "0.2.4"}
+embedded_rust = {path = "../"}
+embedded_rust_macros = {path = "../embedded_rust_macros"}
+stm32f1xx-hal = {version = "0.6.1", features = ["stm32f103", "rt", "medium"]}
+
+[[bin]]
+bench = false
+name = "main"
+path = "src/main.rs"
+test = false

@@ -7,7 +7,9 @@ extern crate alloc;
 #[macro_use]
 pub mod device;
 
+pub mod events;
 mod executor;
+pub mod resources;
 pub mod schemes;
 
 #[global_allocator]
@@ -21,10 +23,9 @@ use core::{
     pin::Pin,
     task::{Context, Poll},
 };
-use embedded_rust_devices::events;
-use embedded_rust_devices::resources::{Resource, ResourceID};
-use embedded_rust_devices::ComponentConfiguration;
+use device::stm32f1xx::ComponentConfiguration;
 use nom_uri::Uri;
+use resources::{Resource, ResourceID};
 
 pub struct Task {
     future: Pin<Box<dyn Future<Output = ()>>>,

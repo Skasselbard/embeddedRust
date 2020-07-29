@@ -23,37 +23,37 @@ static mut USART1_SINGLTN: Option<(Rx<USART1>, ArrayQueue<Result<u8, serial::Err
 //     .expect("filled event queue");
 // }
 
-/// ``Bus`` has to be some usart type from stm32f1xx_hal::stm32::USARTx
-pub struct Usart<Bus> {
-    tx: Tx<Bus>,
-    buffer: &'static ArrayQueue<Result<u8, serial::Error>>,
-}
+// /// ``Bus`` has to be some usart type from stm32f1xx_hal::stm32::USARTx
+// pub struct Usart<Bus> {
+//     tx: Tx<Bus>,
+//     buffer: &'static ArrayQueue<Result<u8, serial::Error>>,
+// }
 
-impl<Bus> Read<u8> for Usart<Bus>
-where
-    Rx<Bus>: Read<u8, Error = serial::Error>,
-{
-    type Error = serial::Error;
-    fn read(&mut self) -> nb::Result<u8, Self::Error> {
-        match self.buffer.pop() {
-            Err(_) => Err(nb::Error::WouldBlock),
-            Ok(result) => result.map_err(|e| nb::Error::Other(e)),
-        }
-    }
-}
+// impl<Bus> Read<u8> for Usart<Bus>
+// where
+//     Rx<Bus>: Read<u8, Error = serial::Error>,
+// {
+//     type Error = serial::Error;
+//     fn read(&mut self) -> nb::Result<u8, Self::Error> {
+//         match self.buffer.pop() {
+//             Err(_) => Err(nb::Error::WouldBlock),
+//             Ok(result) => result.map_err(|e| nb::Error::Other(e)),
+//         }
+//     }
+// }
 
-impl<Bus> Write<u8> for Usart<Bus>
-where
-    Tx<Bus>: Write<u8, Error = core::convert::Infallible>,
-{
-    type Error = core::convert::Infallible;
-    fn write(&mut self, byte: u8) -> nb::Result<(), Self::Error> {
-        self.tx.write(byte)
-    }
-    fn flush(&mut self) -> nb::Result<(), Self::Error> {
-        self.tx.flush()
-    }
-}
+// impl<Bus> Write<u8> for Usart<Bus>
+// where
+//     Tx<Bus>: Write<u8, Error = core::convert::Infallible>,
+// {
+//     type Error = core::convert::Infallible;
+//     fn write(&mut self, byte: u8) -> nb::Result<(), Self::Error> {
+//         self.tx.write(byte)
+//     }
+//     fn flush(&mut self) -> nb::Result<(), Self::Error> {
+//         self.tx.flush()
+//     }
+// }
 
 // impl Usart<USART1> {
 //     pub fn new(tx: Tx<USART1>, rx: Rx<USART1>) -> Result<Self, RuntimeError> {

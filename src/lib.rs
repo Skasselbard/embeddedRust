@@ -7,9 +7,7 @@ extern crate alloc;
 #[macro_use]
 pub mod device;
 
-pub(crate) mod events;
 mod executor;
-pub mod io;
 pub mod schemes;
 
 #[global_allocator]
@@ -23,8 +21,9 @@ use core::{
     pin::Pin,
     task::{Context, Poll},
 };
-pub use device::DeviceInterrupt;
-use embedded_rust_devices::{ComponentConfiguration, Resource, ResourceID};
+use embedded_rust_devices::events;
+use embedded_rust_devices::resources::{Resource, ResourceID};
+use embedded_rust_devices::ComponentConfiguration;
 use nom_uri::Uri;
 
 pub struct Task {
@@ -56,14 +55,7 @@ impl Runtime {
         init_closure: F,
     ) -> Result<Self, RuntimeError> {
         Self::init_heap(heap_bottom, heap_size);
-        events::ERROR_QUEUE
-            .try_init_once(|| crossbeam_queue::ArrayQueue::new(max_events_per_prio))
-            .or_else(|_| Err(RuntimeError::MultipleInitializations))?;
-        events::CRITICAL_QUEUE
-            .try_init_once(|| crossbeam_queue::ArrayQueue::new(max_events_per_prio))
-            .or_else(|_| Err(RuntimeError::MultipleInitializations))?;
-        events::NORMAL_QUEUE
-            .try_init_once(|| crossbeam_queue::ArrayQueue::new(max_events_per_prio))
+        events::init(max_events_per_prio)
             .or_else(|_| Err(RuntimeError::MultipleInitializations))?;
         let mut rt = Self {
             resources: Vec::with_capacity(resource_configuration.len()),
@@ -108,6 +100,7 @@ impl Runtime {
     }
     pub fn run(&mut self) -> ! {
         loop {
+            //FIXME: event handling probably belongs in the executor
             while let Some(event) = events::next() {
                 self.handle_event(event);
             }

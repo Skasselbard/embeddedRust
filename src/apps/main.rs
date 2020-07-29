@@ -20,7 +20,6 @@ use stm32f1xx_hal::{
     timer::{Tim2NoRemap, Timer},
 };
 
-use embedded_rust::device::*;
 use embedded_rust::*;
 
 pub const HEAP_START: usize = 0x2000_0000;

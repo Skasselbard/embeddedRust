@@ -1,5 +1,6 @@
 use super::{ComponentConfiguration, Pin};
-use crate::{RegisterComponent, Resource, ResourceError};
+use crate::events::Event;
+use crate::resources::{RegisterComponent, Resource, ResourceError};
 use alloc::boxed::Box;
 use alloc::collections::{BTreeMap, BTreeSet};
 use core::cmp::Ordering;
@@ -133,14 +134,14 @@ macro_rules! check_interrupt {
         // interrupt registers are determined by type.
         // No actual data is involved
         let mut pin = unsafe { core::mem::transmute::<(), $pinty>(()) };
-        // if pin.check_interrupt() {
-        //     crate::events::push(
-        //         Event::ExternalInterrupt(ExtiEvent::Gpio($pinid)),
-        //         Priority::Critical,
-        //     )
-        //     .expect("filled event queue");
-        //     pin.clear_interrupt_pending_bit();
-        // }
+        if pin.check_interrupt() {
+            // crate::events::push(
+            //     Event::ExternalInterrupt(ExtiEvent::Gpio($pinid)),
+            //     Priority::Critical,
+            // )
+            // .expect("filled event queue");
+            pin.clear_interrupt_pending_bit();
+        }
     };
 }
 

@@ -1,8 +1,6 @@
-use crate::device::ExtiEvent;
-use crate::DeviceInterrupt;
+use crate::{DeviceInterrupt, ExtiEvent};
 use conquer_once::spin::OnceCell;
 use crossbeam_queue::{ArrayQueue, PushError};
-use embedded_rust_devices::ResourceError;
 
 pub enum Priority {
     /// priority 0: System Errors, Faults etc
@@ -16,6 +14,13 @@ pub enum Priority {
 pub(crate) static ERROR_QUEUE: OnceCell<ArrayQueue<Event>> = OnceCell::uninit();
 pub(crate) static CRITICAL_QUEUE: OnceCell<ArrayQueue<Event>> = OnceCell::uninit();
 pub(crate) static NORMAL_QUEUE: OnceCell<ArrayQueue<Event>> = OnceCell::uninit();
+
+pub fn init(queue_buffer: usize) -> Result<(), conquer_once::TryInitError> {
+    ERROR_QUEUE.try_init_once(|| crossbeam_queue::ArrayQueue::new(queue_buffer))?;
+    CRITICAL_QUEUE.try_init_once(|| crossbeam_queue::ArrayQueue::new(queue_buffer))?;
+    NORMAL_QUEUE.try_init_once(|| crossbeam_queue::ArrayQueue::new(queue_buffer))?;
+    Ok(())
+}
 
 #[non_exhaustive]
 #[derive(Clone)]

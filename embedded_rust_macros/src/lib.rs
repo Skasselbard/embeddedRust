@@ -23,6 +23,7 @@ pub fn configure_device(input: TokenStream) -> TokenStream {
             use stm32f1xx_hal::prelude::*;
             use stm32f1xx_hal::gpio::*;
             use embedded_rust_devices::*;
+            use embedded_rust_devices::resources::*;
             let #peripherals_ident = stm32f1xx_hal::pac::Peripherals::take().unwrap();
             let mut flash = #peripherals_ident.FLASH.constrain();
             let mut rcc = #peripherals_ident.RCC.constrain();

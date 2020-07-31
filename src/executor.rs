@@ -1,6 +1,7 @@
 use super::*;
 use alloc::collections::BinaryHeap;
 use core::task::{RawWaker, Waker};
+use log::trace;
 
 pub struct Executor {
     /// lower value means higher priority
@@ -23,14 +24,29 @@ impl Executor {
         self.task_queue.push(HeapElement { priority, task });
     }
     pub fn run(&mut self) {
-        while let Some(HeapElement { priority, mut task }) = self.task_queue.pop() {
-            let waker = dummy_waker();
-            let mut context = Context::from_waker(&waker);
-            match task.poll(&mut context) {
-                Poll::Ready(()) => {} // task done
-                Poll::Pending => self.spawn(task, priority),
+        loop {
+            trace!("executor");
+            if let Some(event) = events::next() {
+                trace!("event");
+                self.handle_event(event);
+                continue; // first handle all events
             }
+            if let Some(HeapElement { priority, mut task }) = self.task_queue.pop() {
+                trace!("task");
+                let waker = dummy_waker();
+                let mut context = Context::from_waker(&waker);
+                match task.poll(&mut context) {
+                    Poll::Ready(()) => {} // task done
+                    Poll::Pending => self.spawn(task, priority),
+                }
+                continue; // test for additional events and task befor termination
+            }
+            break;
         }
+    }
+
+    fn handle_event(&self, event: events::Event) {
+        trace!("event: {:?}", event);
     }
 }
 

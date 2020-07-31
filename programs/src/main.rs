@@ -29,8 +29,7 @@ fn panic(info: &PanicInfo) -> ! {
 fn main() -> ! {
     let (configurations, init_closure) = configure_device!({
             "gpios": [
-                ["PA0", "input", "floating", "interrupt"],
-                ["PB10", "output", "push_pull"]
+                ["PA0", "input", "pull_down", "rising"]
             ]
     });
     let runtime = Runtime::init(HEAP_START, HEAP_SIZE, 32, &configurations, init_closure);

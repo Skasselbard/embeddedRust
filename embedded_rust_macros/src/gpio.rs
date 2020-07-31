@@ -1,4 +1,3 @@
-// use embedded_rust::device::stm32f1xx::{Channel, Direction, Gpio, Pin, PinMode, Port, TriggerEdge};
 use quote::format_ident;
 use syn::{parse_quote, parse_str, Expr, Stmt};
 

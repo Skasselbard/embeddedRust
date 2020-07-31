@@ -20,12 +20,15 @@ pub fn configure_device(input: TokenStream) -> TokenStream {
     let peripherals_ident = format_ident!("{}", PERIPHERALS_KEY);
     let gpios = gpio::parse(device.gpios);
     let mut init_block: Block = parse_quote!({
+
         use stm32f1xx_hal::gpio::{Edge, ExtiPin};
         use stm32f1xx_hal::prelude::*;
+        use stm32f1xx_hal::pac;
         use embedded_rust::device::stm32f1xx::{
             PinMode, Direction, Pin, Gpio, ComponentConfiguration, TriggerEdge, Channel, Port
         };
         use embedded_rust::resources::RegisterComponent;
+
         let #peripherals_ident = stm32f1xx_hal::pac::Peripherals::take().unwrap();
         let mut flash = #peripherals_ident.FLASH.constrain();
         let mut rcc = #peripherals_ident.RCC.constrain();
@@ -35,9 +38,9 @@ pub fn configure_device(input: TokenStream) -> TokenStream {
     let mut return_array = generate_component_config_array(&gpios);
     init_block.stmts.append(&mut gpio::generate(gpios));
     // TODO: unmask interrupts
-    // init_block.stmts.push(parse_quote!(unsafe {
-    //     pac::NVIC::unmask(pac::Interrupt::EXTI0);
-    // }));
+    init_block.stmts.push(parse_quote!(unsafe {
+        pac::NVIC::unmask(pac::Interrupt::EXTI0);
+    }));
     init_block.stmts.append(&mut return_array);
     init_block.to_token_stream().into()
 }

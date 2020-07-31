@@ -9,6 +9,7 @@ pub mod device;
 
 pub mod events;
 mod executor;
+mod logging;
 pub mod resources;
 pub mod schemes;
 
@@ -24,6 +25,7 @@ use core::{
     task::{Context, Poll},
 };
 use device::stm32f1xx::ComponentConfiguration;
+use log::{trace, Level};
 use nom_uri::Uri;
 use resources::{Resource, ResourceID};
 
@@ -63,6 +65,7 @@ impl Runtime {
             executor: executor::Executor::new(),
         };
         rt.configure(resource_configuration);
+        logging::init().expect("log initialization failed");
         init_closure();
         Ok(rt)
     }
@@ -100,24 +103,17 @@ impl Runtime {
         unsafe { ALLOCATOR.lock().init(heap_bottom, heap_size) };
     }
     pub fn run(&mut self) -> ! {
+        trace!("run");
         loop {
-            //FIXME: event handling probably belongs in the executor
-            while let Some(event) = events::next() {
-                self.handle_event(event);
-            }
             // TODO: ? waker checken ?
             // TODO: do something  with the result!
             self.executor.run();
+            trace!("sleep");
             cortex_m::asm::wfi(); // safe power till next interrupt
         }
     }
     pub fn spawn_task(&mut self, task: Task, priority: usize) {
         self.executor.spawn(task, priority)
-    }
-    fn handle_event(&self, event: events::Event) {
-        match event {
-            _ => unimplemented!(),
-        }
     }
     fn configure(&mut self, configurations: &[ComponentConfiguration]) {
         for configuration in configurations {

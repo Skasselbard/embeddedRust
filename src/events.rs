@@ -2,6 +2,7 @@ use crate::device::stm32f1xx::{DeviceInterrupt, ExtiEvent};
 use conquer_once::spin::OnceCell;
 use crossbeam_queue::{ArrayQueue, PushError};
 
+#[derive(Debug)]
 pub enum Priority {
     /// priority 0: System Errors, Faults etc
     Error,
@@ -30,9 +31,8 @@ pub enum Event {
 }
 
 pub fn next() -> Option<Event> {
-    pop(Priority::Error)
-        .or(pop(Priority::Critical))
-        .or(pop(Priority::Normal))
+    log::trace!("get next event");
+    pop(Priority::Error).or(pop(Priority::Critical).or(pop(Priority::Normal)))
 }
 
 /// Next event with given priority if any,
@@ -52,6 +52,7 @@ fn pop(prio: Priority) -> Option<Event> {
 /// **Error**
 /// if the queue is full
 pub fn push(event: Event, prio: Priority) -> Result<(), Event> {
+    log::trace!("push event {:?} - {:?}", event, prio);
     let queue = match prio {
         Priority::Error => &ERROR_QUEUE,
         Priority::Critical => &CRITICAL_QUEUE,

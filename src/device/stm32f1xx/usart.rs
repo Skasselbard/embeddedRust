@@ -1,11 +1,10 @@
-use crossbeam_queue::ArrayQueue;
 use embedded_hal::serial::{Read, Write};
 use stm32f1xx_hal::device::{interrupt, USART1};
 use stm32f1xx_hal::serial::{self, Rx, Tx};
 
 pub const QUEUE_LENGTH: usize = 32;
 // pub static mut USART1_OBJ: Option<Usart<USART1>> = None;
-static mut USART1_SINGLTN: Option<(Rx<USART1>, ArrayQueue<Result<u8, serial::Error>>)> = None;
+// static mut USART1_SINGLTN: Option<(Rx<USART1>, ArrayQueue<Result<u8, serial::Error>>)> = None;
 
 // #[interrupt]
 // fn USART1() {

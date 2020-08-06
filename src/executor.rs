@@ -1,52 +1,59 @@
 use super::*;
-use alloc::collections::BinaryHeap;
+use crate::events::Event;
+use alloc::collections::{BTreeMap, BinaryHeap};
 use core::task::{RawWaker, Waker};
 use log::trace;
 
 pub struct Executor {
-    /// lower value means higher priority
-    task_queue: BinaryHeap<HeapElement>,
-}
-
-struct HeapElement {
-    priority: usize,
-    task: Task,
+    task_queue: BinaryHeap<Task>,
+    event_tasks: BTreeMap<Event, Waker>,
 }
 
 impl Executor {
     pub fn new() -> Executor {
         Executor {
             task_queue: BinaryHeap::new(),
+            event_tasks: BTreeMap::new(),
         }
     }
 
-    pub fn spawn(&mut self, task: Task, priority: usize) {
-        self.task_queue.push(HeapElement { priority, task });
+    pub fn spawn(&mut self, task: Task) {
+        self.task_queue.push(task);
     }
     pub fn run(&mut self) {
+        trace!("executor");
         loop {
-            trace!("executor");
             if let Some(event) = events::next() {
-                trace!("event");
                 self.handle_event(event);
                 continue; // first handle all events
             }
-            if let Some(HeapElement { priority, mut task }) = self.task_queue.pop() {
-                trace!("task");
+            if let Some(mut task) = self.task_queue.pop() {
                 let waker = dummy_waker();
                 let mut context = Context::from_waker(&waker);
                 match task.poll(&mut context) {
                     Poll::Ready(()) => {} // task done
-                    Poll::Pending => self.spawn(task, priority),
+                    Poll::Pending => self.spawn(task),
                 }
-                continue; // test for additional events and task befor termination
+                continue; // test for additional events and task before termination
             }
             break;
         }
     }
+    pub fn register_event_task(&mut self, event: events::Event, task: Task) {
+        unimplemented!();
+        // self.event_tasks.insert(event, task);
+    }
 
     fn handle_event(&self, event: events::Event) {
         trace!("event: {:?}", event);
+        // if let Some(task) = self.event_tasks.get(&event) {
+        //     let waker = dummy_waker();
+        //     let mut context = Context::from_waker(&waker);
+        //     match task.poll(&mut context) {
+        //         Poll::Ready(()) => {} // task done
+        //         Poll::Pending => {}   //self.spawn(task),
+        //     }
+        // }
     }
 }
 
@@ -63,21 +70,4 @@ fn dummy_raw_waker() -> RawWaker {
 
 fn dummy_waker() -> Waker {
     unsafe { Waker::from_raw(dummy_raw_waker()) }
-}
-
-impl Eq for HeapElement {}
-impl PartialEq for HeapElement {
-    fn eq(&self, other: &Self) -> bool {
-        core::ptr::eq(&self.task, &other.task)
-    }
-}
-impl Ord for HeapElement {
-    fn cmp(&self, other: &Self) -> core::cmp::Ordering {
-        self.priority.cmp(&other.priority)
-    }
-}
-impl PartialOrd for HeapElement {
-    fn partial_cmp(&self, other: &Self) -> Option<core::cmp::Ordering> {
-        Some(self.cmp(other))
-    }
 }

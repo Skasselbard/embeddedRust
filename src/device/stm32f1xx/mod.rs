@@ -3,22 +3,11 @@ mod usart;
 mod gpio;
 mod pwm;
 pub use gpio::*;
-use nom_uri::{ToUri, Uri};
+use nom_uri::ToUri;
 pub use pwm::*;
-use stm32f1xx_hal::device::USART1;
-use stm32f1xx_hal::serial::{Event, Serial};
 pub use usart::*;
 
-use alloc::boxed::Box;
-use alloc::collections::BTreeSet;
 use core::cmp::Ordering;
-use stm32f1xx_hal::{
-    adc,
-    device::interrupt,
-    pac,
-    prelude::*,
-    timer::{Tim2NoRemap, Timer},
-};
 
 pub type DeviceInterrupt = stm32f1xx_hal::device::Interrupt;
 

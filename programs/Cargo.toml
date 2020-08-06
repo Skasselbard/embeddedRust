@@ -13,6 +13,7 @@ cortex-m-semihosting = "0.3.5"
 embedded-hal = {version = "0.2.4"}
 embedded_rust = {path = "../"}
 embedded_rust_macros = {path = "../embedded_rust_macros"}
+nom-uri = {git = "https://github.com/Skasselbard/nom-uri"}
 stm32f1xx-hal = {version = "0.6.1", features = ["stm32f103", "rt", "medium"]}
 
 [[bin]]

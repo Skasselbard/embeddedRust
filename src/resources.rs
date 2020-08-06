@@ -1,4 +1,5 @@
 use super::ComponentConfiguration;
+use core::task::{Context, Poll};
 use nom_uri::{ToUri, Uri};
 
 #[derive(Copy, Clone, PartialEq, Eq, Debug, Hash)]
@@ -21,16 +22,27 @@ pub trait RegisterComponent {
     fn register_component(self, configuration: ComponentConfiguration);
 }
 
+// #[allow(unused)]
+// pub trait Resource {
+//     fn read(&mut self, buf: &mut [u8]) -> nb::Result<usize, ResourceError> {
+//         ResourceError::NonReadingResource.into()
+//     }
+//     fn write(&mut self, buf: &[u8]) -> nb::Result<usize, ResourceError> {
+//         ResourceError::NonWritingResource.into()
+//     }
+//     fn seek(&mut self, pos: usize) -> nb::Result<(), ResourceError>;
+//     fn flush(&mut self) -> nb::Result<(), ResourceError>;
+//     fn to_uri<'uri>(&self, buffer: &'uri mut str) -> Uri<'uri>;
+// }
 #[allow(unused)]
 pub trait Resource {
-    fn read(&mut self, buf: &mut [u8]) -> nb::Result<usize, ResourceError> {
-        ResourceError::NonReadingResource.into()
+    fn read_next(&mut self, context: &mut Context) -> Poll<Option<u8>> {
+        Poll::Ready(None)
     }
-    fn write(&mut self, buf: &[u8]) -> nb::Result<usize, ResourceError> {
-        ResourceError::NonWritingResource.into()
+    fn write_next(&mut self, context: &mut Context, byte: u8) -> Poll<Result<(), ResourceError>> {
+        Poll::Ready(Err(ResourceError::NonWritingResource))
     }
-    fn seek(&mut self, pos: usize) -> nb::Result<(), ResourceError>;
-    fn flush(&mut self) -> nb::Result<(), ResourceError>;
+    fn seek(&mut self, context: &mut Context, pos: usize) -> Poll<Result<(), ResourceError>>;
     fn to_uri<'uri>(&self, buffer: &'uri mut str) -> Uri<'uri>;
 }
 

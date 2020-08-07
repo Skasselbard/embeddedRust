@@ -1,6 +1,6 @@
 use super::ComponentConfiguration;
 use core::task::{Context, Poll};
-use nom_uri::{ToUri, Uri};
+use nom_uri::Uri;
 
 #[derive(Copy, Clone, PartialEq, Eq, Debug, Hash)]
 pub struct ResourceID(pub u8);

@@ -1,8 +1,8 @@
-use embedded_hal::serial::{Read, Write};
-use stm32f1xx_hal::device::{interrupt, USART1};
-use stm32f1xx_hal::serial::{self, Rx, Tx};
+// use embedded_hal::serial::{Read, Write};
+// use stm32f1xx_hal::device::{interrupt, USART1};
+// use stm32f1xx_hal::serial::{self, Rx, Tx};
 
-pub const QUEUE_LENGTH: usize = 32;
+// pub const QUEUE_LENGTH: usize = 32;
 // pub static mut USART1_OBJ: Option<Usart<USART1>> = None;
 // static mut USART1_SINGLTN: Option<(Rx<USART1>, ArrayQueue<Result<u8, serial::Error>>)> = None;
 
@@ -69,26 +69,26 @@ pub const QUEUE_LENGTH: usize = 32;
 //     }
 // }
 
-/// usart with default values
-/// Pins: PA9, PA10
-#[macro_export]
-macro_rules! usart1 {
-    ( $gpioa:expr, $peripherals:expr, $rcc:expr, $afio:expr, $clocks:expr) => {{
-        use crate::device::stm32f1xx::*;
-        use stm32f1xx_hal::serial::{self, Event};
-        let tx = $gpioa.pa9.into_alternate_push_pull(&mut $gpioa.crh);
-        let rx = $gpioa.pa10;
-        let mut serial = serial::Serial::usart1(
-            $peripherals.USART1,
-            (tx, rx),
-            &mut $afio.mapr,
-            stm32f1xx_hal::serial::Config::default(),
-            $clocks,
-            &mut $rcc.apb2,
-        );
-        serial.listen(Event::Rxne);
-        let (tx, rx) = serial.split();
-        let serial = Usart::new(tx, rx).unwrap();
-        crate::device::usart::Usart::new(serial)
-    }};
-}
+// /// usart with default values
+// /// Pins: PA9, PA10
+// #[macro_export]
+// macro_rules! usart1 {
+//     ( $gpioa:expr, $peripherals:expr, $rcc:expr, $afio:expr, $clocks:expr) => {{
+//         use crate::device::stm32f1xx::*;
+//         use stm32f1xx_hal::serial::{self, Event};
+//         let tx = $gpioa.pa9.into_alternate_push_pull(&mut $gpioa.crh);
+//         let rx = $gpioa.pa10;
+//         let mut serial = serial::Serial::usart1(
+//             $peripherals.USART1,
+//             (tx, rx),
+//             &mut $afio.mapr,
+//             stm32f1xx_hal::serial::Config::default(),
+//             $clocks,
+//             &mut $rcc.apb2,
+//         );
+//         serial.listen(Event::Rxne);
+//         let (tx, rx) = serial.split();
+//         let serial = Usart::new(tx, rx).unwrap();
+//         crate::device::usart::Usart::new(serial)
+//     }};
+// }

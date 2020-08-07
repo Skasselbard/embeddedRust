@@ -4,7 +4,7 @@ use gpio::Gpio;
 use proc_macro::TokenStream;
 use quote::{format_ident, ToTokens};
 use serde_derive::Deserialize;
-use syn::{parse_macro_input, parse_quote, Block, Stmt};
+use syn::{parse_quote, Block, Stmt};
 
 #[derive(Deserialize, Debug)]
 struct Device {

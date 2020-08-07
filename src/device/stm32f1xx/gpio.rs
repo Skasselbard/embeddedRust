@@ -1,11 +1,11 @@
 use super::{ComponentConfiguration, Pin};
-use crate::events::{self, Event, Priority};
+use crate::events::{self, Event};
 use crate::resources::{RegisterComponent, Resource, ResourceError};
 use crate::{Runtime, RuntimeError, Task};
 use alloc::boxed::Box;
 use alloc::collections::{BTreeMap, BTreeSet};
-use core::cmp::Ordering;
 use core::convert::Infallible;
+use core::sync::atomic::{AtomicUsize, Ordering};
 use core::task::{Context, Poll};
 use embedded_hal::digital::v2;
 use nom_uri::{ToUri, Uri};
@@ -41,6 +41,12 @@ pub struct Gpio {
     id: Pin,
     direction: Direction,
     mode: PinMode,
+}
+
+/// Resource that acts as a sink for GPIO events
+pub struct GpioEvent {
+    id: Pin,
+    event: bool,
 }
 
 #[derive(PartialEq, Eq, Clone, Copy, Debug, PartialOrd, Ord, Hash)]
@@ -146,7 +152,7 @@ macro_rules! check_interrupt {
                 port: $port,
             }));
             cortex_m::interrupt::free(|cs| {
-                events::push(e, Priority::Critical, cs);
+                events::push(e, cs);
                 pin.clear_interrupt_pending_bit();
             });
         }
@@ -174,7 +180,7 @@ where
             ComponentConfiguration::Gpio(gpio) => gpio,
             _ => panic!("gpio has non gpio configuration"),
         };
-        unsafe { gpios().input.insert(key, Box::new(self)) };
+        gpios().input.insert(key, Box::new(self));
     }
 }
 impl<Mode> RegisterComponent for Pxx<Output<Mode>>
@@ -186,7 +192,7 @@ where
             ComponentConfiguration::Gpio(gpio) => gpio,
             _ => panic!("gpio has non gpio configuration"),
         };
-        unsafe { gpios().output.insert(key, Box::new(self)) };
+        gpios().output.insert(key, Box::new(self));
     }
 }
 impl RegisterComponent for Pxx<Analog>
@@ -203,14 +209,14 @@ impl Resource for Gpio {
     fn read_next(&mut self, _: &mut Context) -> Poll<Option<u8>> {
         match self.direction {
             Direction::Input(_) => {
-                if let Some(input_pin) = unsafe { gpios().input.get(self) } {
+                if let Some(input_pin) = gpios().input.get(self) {
                     Poll::Ready(Some(input_pin.is_high().unwrap().into())) // infallible
                 } else {
                     Poll::Ready(None)
                 }
             }
             Direction::Output => {
-                if let Some(output_pin) = unsafe { gpios().output.get(self) } {
+                if let Some(output_pin) = gpios().output.get(self) {
                     Poll::Ready(Some(output_pin.is_set_high().unwrap().into())) // infallible
                 } else {
                     Poll::Ready(None)
@@ -222,7 +228,7 @@ impl Resource for Gpio {
     fn write_next(&mut self, _: &mut Context, byte: u8) -> Poll<Result<(), ResourceError>> {
         match self.direction {
             Direction::Output => {
-                if let Some(output_pin) = unsafe { gpios().output.get_mut(self) } {
+                if let Some(output_pin) = gpios().output.get_mut(self) {
                     match byte != 0 {
                         true => output_pin.set_high().unwrap(), // infallible
                         false => output_pin.set_low().unwrap(), // infallible
@@ -243,56 +249,28 @@ impl Resource for Gpio {
         (self as &dyn ToUri).to_uri(buffer)
     }
 }
-// impl Resource for Gpio {
-//     fn read(&mut self, buf: &mut [u8]) -> nb::Result<usize, ResourceError> {
-//         match self.direction {
-//             Direction::Input(_) => {
-//                 if let Some(input_pin) = unsafe { gpios().input.get(self) } {
-//                     buf[0] = input_pin.is_high().unwrap().into(); // infallible
-//                 } else {
-//                     return ResourceError::NotFound.into();
-//                 }
-//             }
-//             Direction::Output => {
-//                 if let Some(output_pin) = unsafe { gpios().output.get(self) } {
-//                     buf[0] = output_pin.is_set_high().unwrap().into(); // infallible
-//                 } else {
-//                     return ResourceError::NotFound.into();
-//                 }
-//             }
-//             Direction::Alternate => unimplemented!(),
-//         }
-//         Ok(1)
-//     }
-//     fn write(&mut self, buf: &[u8]) -> nb::Result<usize, ResourceError> {
-//         match self.direction {
-//             Direction::Output => {
-//                 if let Some(output_pin) = unsafe { gpios().output.get_mut(self) } {
-//                     for byte in buf {
-//                         match *byte != 0 {
-//                             true => output_pin.set_high().unwrap(), // infallible
-//                             false => output_pin.set_low().unwrap(), // infallible
-//                         }
-//                     }
-//                     Ok(buf.len())
-//                 } else {
-//                     ResourceError::NotFound.into()
-//                 }
-//             }
-//             Direction::Input(_) => ResourceError::NonWritingResource.into(),
-//             Direction::Alternate => unimplemented!(),
-//         }
-//     }
-//     fn seek(&mut self, _: usize) -> nb::Result<(), ResourceError> {
-//         Ok(())
-//     }
-//     fn flush(&mut self) -> nb::Result<(), ResourceError> {
-//         Ok(())
-//     }
-//     fn to_uri<'uri>(&self, buffer: &'uri mut str) -> nom_uri::Uri<'uri> {
-//         (self as &dyn ToUri).to_uri(buffer)
-//     }
-// }
+
+impl Resource for GpioEvent {
+    fn read_next(&mut self, context: &mut Context) -> Poll<Option<u8>> {
+        if self.event {
+            self.event = false;
+            Poll::Ready(Some(0 as u8))
+        } else {
+            Runtime::get().register_waker(
+                &Event::ExternalInterrupt(ExtiEvent::Gpio(self.id)),
+                context.waker(),
+            );
+            self.event = true; //TODO: reset im waker?
+            Poll::Pending
+        }
+    }
+    fn seek(&mut self, _: &mut Context, _: usize) -> Poll<Result<(), ResourceError>> {
+        Poll::Ready(Ok(()))
+    }
+    fn to_uri<'uri>(&self, buffer: &'uri mut str) -> nom_uri::Uri<'uri> {
+        (self as &dyn ToUri).to_uri(buffer)
+    }
+}
 
 impl<'uri> ToUri<'uri> for Gpio {
     fn to_uri(&self, buffer: &'uri mut str) -> Uri<'uri> {
@@ -309,14 +287,30 @@ impl<'uri> ToUri<'uri> for Gpio {
     }
 }
 
+impl<'uri> ToUri<'uri> for GpioEvent {
+    fn to_uri(&self, buffer: &'uri mut str) -> Uri<'uri> {
+        use crate::resources::StrWriter;
+        use core::fmt::Write;
+        let mut buffer = StrWriter::from(buffer);
+        write!(
+            buffer,
+            "event:gpio/p{}{}",
+            self.id.channel(),
+            self.id.port()
+        )
+        .expect("format error for event-gpio uri");
+        Uri::parse(buffer.buffer().expect("format error for event-gpio uri")).unwrap()
+    }
+}
+
 impl Ord for Gpio {
-    fn cmp(&self, other: &Self) -> Ordering {
+    fn cmp(&self, other: &Self) -> core::cmp::Ordering {
         self.id.cmp(&other.id)
     }
 }
 
 impl PartialOrd for Gpio {
-    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
+    fn partial_cmp(&self, other: &Self) -> Option<core::cmp::Ordering> {
         Some(self.cmp(other))
     }
 }

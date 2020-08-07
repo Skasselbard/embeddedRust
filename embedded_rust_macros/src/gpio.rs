@@ -96,9 +96,9 @@ impl Gpio {
             mode,
         }
     }
-    pub fn id(&self) -> Pin {
-        self.id
-    }
+    // pub fn id(&self) -> Pin {
+    //     self.id
+    // }
     pub fn channel(&self) -> Channel {
         self.id.channel()
     }

@@ -5,6 +5,7 @@ use cortex_m_rt::entry;
 use cortex_m_semihosting::hprintln;
 use embedded_rust::*;
 use embedded_rust_macros::*;
+use futures::StreamExt;
 
 pub const HEAP_START: usize = 0x2000_0000;
 pub const HEAP_SIZE: usize = 10 * 1024; // 10 KiB
@@ -17,13 +18,17 @@ fn main() -> ! {
             ]
     });
     let rt =
-        Runtime::init(HEAP_START, HEAP_SIZE, 32, &configurations, init_closure).expect("InitError");
-    rt.spawn_task(Task::new(0, example_task()));
+        Runtime::init(HEAP_START, HEAP_SIZE, &configurations, init_closure).expect("InitError");
+    // rt.spawn_task(Task::new(0, example_task()));
+    rt.spawn_task(Task::new(0, test_task()));
     rt.run();
 }
 
 async fn test_task() {
-    let gpio = Runtime::get().get_resource_id("digital:gpio/pa2").unwrap();
+    let mut gpio = Runtime::get().get_resource_id("event:gpio/pa2").unwrap();
+    while let Some(_event) = gpio.read_stream().next().await {
+        hprintln!("GPIOEVENT IN MAIN");
+    }
 }
 
 async fn async_number() -> u32 {

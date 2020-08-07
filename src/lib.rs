@@ -1,5 +1,4 @@
 #![no_std]
-#![feature(option_expect_none)]
 #![feature(const_fn)]
 #![feature(alloc_error_handler)]
 #![feature(const_btree_new)]
@@ -10,29 +9,34 @@ extern crate alloc;
 pub mod device;
 
 pub mod events;
-mod executor;
-mod logging;
 pub mod resources;
 pub mod schemes;
 
-#[global_allocator]
-static ALLOCATOR: linked_list_allocator::LockedHeap = linked_list_allocator::LockedHeap::empty();
+pub use executor::Task;
+
+mod executor;
+mod logging;
 
 use alloc::boxed::Box;
 use alloc::collections::BTreeMap;
 use alloc::string::String;
 use alloc::vec::Vec;
 use core::panic::PanicInfo;
+use core::task::Waker;
 use core::{
     future::Future,
     pin::Pin,
     task::{Context, Poll},
 };
 use device::stm32f1xx::ComponentConfiguration;
-use futures::{Stream, StreamExt};
-use log::{trace, Level};
+use events::Event;
+use futures::StreamExt;
+use log::trace;
 use nom_uri::Uri;
 use resources::{Resource, ResourceError, ResourceID};
+
+#[global_allocator]
+static ALLOCATOR: linked_list_allocator::LockedHeap = linked_list_allocator::LockedHeap::empty();
 
 #[alloc_error_handler]
 fn alloc_error_handler(layout: alloc::alloc::Layout) -> ! {
@@ -41,26 +45,15 @@ fn alloc_error_handler(layout: alloc::alloc::Layout) -> ! {
 
 #[panic_handler]
 fn panic(info: &PanicInfo) -> ! {
-    log::error!("panic: {}", info);
+    // log::error!("panic: {}", info);
+    cortex_m_semihosting::hprintln!("panic: {}", info);
     cortex_m::interrupt::disable();
     loop {}
 }
 
-pub struct Task {
-    priority: usize,
-    /// TODO: Maybe consider stack pinning:
-    /// https://doc.rust-lang.org/stable/std/pin/index.html#projections-and-structural-pinning
-    /// as mentioned in phil oppps blog:
-    /// https://os.phil-opp.com/async-await/#pinning
-    future: Pin<Box<dyn Future<Output = ()>>>,
-}
-
 pub struct Runtime {
-    // resource_ids: BTreeMap<Uri<>, ResourceID)>,
-    resources: Vec<Box<dyn Resource>>,
+    static_resources: Vec<Box<dyn Resource>>,
     executor: executor::Executor,
-    //TODO: implement callbacks (observer pattern?)
-    // event_callbacks: BTreeMap<Event, Task>
     resource_cache: BTreeMap<String, ResourceID>,
 }
 
@@ -78,22 +71,20 @@ impl Runtime {
     pub fn init<F: FnOnce()>(
         heap_bottom: usize,
         heap_size: usize,
-        max_events_per_prio: usize,
         resource_configuration: &[ComponentConfiguration],
-        init_closure: F,
+        _init_closure: F,
     ) -> Result<&'static mut Self, RuntimeError> {
         let inner = Self::get_inner();
         if let Some(_) = inner {
             return Err(RuntimeError::MultipleInitializations);
         };
         Self::init_heap(heap_bottom, heap_size);
-        events::init(max_events_per_prio)
-            .or_else(|_| Err(RuntimeError::MultipleInitializations))?;
         let mut rt = Self {
-            resources: Vec::with_capacity(resource_configuration.len()),
+            static_resources: Vec::with_capacity(resource_configuration.len()),
             executor: executor::Executor::new(),
             resource_cache: BTreeMap::new(),
         };
+        events::get_queue(); // initialize lazy static
         rt.configure(resource_configuration);
         logging::init().expect("log initialization failed");
         inner.replace(rt);
@@ -109,7 +100,7 @@ impl Runtime {
     }
     fn get_resource(&mut self, id: &ResourceID) -> Result<&mut dyn Resource, RuntimeError> {
         Ok(self
-            .resources
+            .static_resources
             .get_mut(id.0 as usize)
             .expect("Resource id not found in vector")
             .as_mut())
@@ -121,9 +112,9 @@ impl Runtime {
             None => {
                 let mut id = None;
                 let mut buffer = String::new();
-                for i in 0..self.resources.len() {
+                for i in 0..self.static_resources.len() {
                     let parsed_uri = Uri::try_from(uri).or(Err(RuntimeError::UriParseError))?;
-                    if self.resources[i].to_uri(&mut buffer) == parsed_uri {
+                    if self.static_resources[i].to_uri(&mut buffer) == parsed_uri {
                         id = Some(ResourceID(i as u8));
                         break;
                     }
@@ -139,8 +130,8 @@ impl Runtime {
         }
     }
     fn add_resource(&mut self, resource: Box<dyn Resource>) -> ResourceID {
-        let id = self.resources.len();
-        self.resources.push(resource);
+        let id = self.static_resources.len();
+        self.static_resources.push(resource);
         ResourceID(id as u8)
     }
     /// Creates a new heap with the given bottom and size. The bottom address must be
@@ -154,11 +145,10 @@ impl Runtime {
         //TODO: enable interrupts here
         trace!("run");
         loop {
-            // TODO: ? waker checken ?
-            // TODO: do something  with the result!
             self.executor.run();
             trace!("sleep");
-            cortex_m::asm::wfi(); // safe power till next interrupt
+            //TODO: move to device
+            cortex_m::asm::wfe(); // safe power till cpu event
         }
     }
     pub fn spawn_task(&mut self, task: Task) {
@@ -173,24 +163,14 @@ impl Runtime {
             self.add_resource(resource);
         }
     }
-}
-
-impl Task {
-    /// zero is highest priority
-    pub fn new(priority: usize, future: impl Future<Output = ()> + 'static) -> Task {
-        Task {
-            future: Box::pin(future),
-            priority,
-        }
-    }
-    fn poll(&mut self, context: &mut Context) -> Poll<()> {
-        self.future.as_mut().poll(context)
+    pub(crate) fn register_waker(&mut self, trigger: &Event, waker: &Waker) {
+        self.executor.register_waker(trigger, waker)
     }
 }
 
 #[allow(unused)]
 impl ResourceID {
-    fn read_stream(&mut self) -> impl Stream<Item = u8> {
+    pub fn read_stream(&mut self) -> impl StreamExt<Item = u8> {
         use futures::stream::poll_fn;
         let id = *self;
         poll_fn(move |cx| Runtime::get().get_resource(&id).unwrap().read_next(cx))
@@ -205,7 +185,7 @@ impl ResourceID {
         // }
         // S { id: *self }
     }
-    async fn write(
+    pub async fn write(
         &mut self,
         mut stream: impl StreamExt<Item = u8> + Unpin,
     ) -> Result<(), ResourceError> {
@@ -217,28 +197,11 @@ impl ResourceID {
         }
         Ok(())
     }
-    async fn seek(&mut self, pos: usize) -> Result<(), ResourceError> {
+    pub async fn seek(&mut self, pos: usize) -> Result<(), ResourceError> {
         use futures::future::poll_fn;
         poll_fn(|cx| Runtime::get().get_resource(self).unwrap().seek(cx, pos)).await
     }
-    fn to_uri<'uri>(&self, buffer: &'uri mut str) -> Uri<'uri> {
+    pub fn to_uri<'uri>(&self, buffer: &'uri mut str) -> Uri<'uri> {
         Runtime::get().get_resource(self).unwrap().to_uri(buffer)
-    }
-}
-
-impl Eq for Task {}
-impl PartialEq for Task {
-    fn eq(&self, other: &Self) -> bool {
-        core::ptr::eq(&self.priority, &other.priority)
-    }
-}
-impl Ord for Task {
-    fn cmp(&self, other: &Self) -> core::cmp::Ordering {
-        self.priority.cmp(&other.priority)
-    }
-}
-impl PartialOrd for Task {
-    fn partial_cmp(&self, other: &Self) -> Option<core::cmp::Ordering> {
-        Some(self.cmp(other))
     }
 }

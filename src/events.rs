@@ -1,53 +1,20 @@
-use crate::device::stm32f1xx::{DeviceInterrupt, ExtiEvent};
-use crate::RuntimeError;
+use crate::device::stm32f1xx::ExtiEvent;
 use alloc::collections::VecDeque;
+use core::ops::DerefMut;
 use cortex_m::interrupt::CriticalSection;
+use once_cell::unsync::Lazy;
 
-#[derive(Debug)]
-pub enum Priority {
-    /// priority 0: System Errors, Faults etc
-    Error,
-    /// priority 1: Important Events and task specific errors
-    Critical,
-    /// priority 2: Standard non critical event
-    Normal,
-}
-
-// TODO: prevent heap allocations in interrupts!
-// TODO: make it a stream? from futures-util
-static mut ERROR_QUEUE: Option<VecDeque<Event>> = None;
-static mut CRITICAL_QUEUE: Option<VecDeque<Event>> = None;
-static mut NORMAL_QUEUE: Option<VecDeque<Event>> = None;
-
-pub fn init(queue_buffer: usize) -> Result<(), RuntimeError> {
+pub(crate) fn get_queue() -> &'static mut VecDeque<Event> {
+    // TODO: prevent heap allocations in interrupts!
+    // TODO: make it a stream? from futures-util
+    // static mut EVENT_QUEUE: Lazy<VecDeque<Event>> = Lazy::new(|| VecDeque::with_capacity(10));
+    // unsafe { EVENT_QUEUE.deref_mut() }
+    static mut EVENT_QUEUE: Option<VecDeque<Event>> = None;
     unsafe {
-        if let Some(_) = ERROR_QUEUE {
-            return Err(RuntimeError::MultipleInitializations);
+        if let None = EVENT_QUEUE {
+            EVENT_QUEUE = Some(VecDeque::with_capacity(10));
         }
-        if let Some(_) = CRITICAL_QUEUE {
-            return Err(RuntimeError::MultipleInitializations);
-        }
-        if let Some(_) = NORMAL_QUEUE {
-            return Err(RuntimeError::MultipleInitializations);
-        }
-        ERROR_QUEUE = Some(VecDeque::with_capacity(queue_buffer));
-        CRITICAL_QUEUE = Some(VecDeque::with_capacity(queue_buffer));
-        NORMAL_QUEUE = Some(VecDeque::with_capacity(queue_buffer));
-    }
-    Ok(())
-}
-
-fn get_queue(prio: Priority) -> &'static mut VecDeque<Event> {
-    let queue = unsafe {
-        match prio {
-            Priority::Error => &mut ERROR_QUEUE,
-            Priority::Critical => &mut CRITICAL_QUEUE,
-            Priority::Normal => &mut NORMAL_QUEUE,
-        }
-    };
-    match queue {
-        Some(inner) => inner,
-        None => panic!("uninitialized event queue"),
+        EVENT_QUEUE.as_mut().unwrap()
     }
 }
 
@@ -58,21 +25,15 @@ pub enum Event {
     ExternalInterrupt(ExtiEvent),
 }
 
+//TODO: add critical section?
 pub fn next() -> Option<Event> {
     log::trace!("get next event");
-    pop(Priority::Error).or(pop(Priority::Critical).or(pop(Priority::Normal)))
+    get_queue().pop_front()
 }
 
-/// Next event with given priority if any,
-/// None otherwise
-fn pop(prio: Priority) -> Option<Event> {
-    get_queue(prio).pop_front()
-}
-/// **Error**
-/// if the queue is full
-pub fn push(event: Event, prio: Priority, _cs: &CriticalSection) {
-    log::trace!("push event {:?} - {:?}", event, prio);
-    get_queue(prio).push_back(event)
+pub fn push(event: Event, _cs: &CriticalSection) {
+    log::trace!("push event {:?}", event);
+    get_queue().push_back(event)
 }
 
 impl core::fmt::Debug for Event {

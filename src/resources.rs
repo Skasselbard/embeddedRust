@@ -98,7 +98,7 @@ impl<'a> core::fmt::Write for ByteWriter<'a> {
     fn write_str(&mut self, s: &str) -> core::fmt::Result {
         let s = s.as_bytes();
         if self.buffer.len() - self.cursor < s.len() {
-            log::error!("Buffer to small");
+            log::error!("fmt::Write: Buffer to small");
             Err(core::fmt::Error)
         } else {
             for i in 0..s.len() {

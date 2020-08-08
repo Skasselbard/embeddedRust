@@ -90,14 +90,13 @@ impl Runtime {
             return Err(RuntimeError::MultipleInitializations);
         };
         Self::init_heap(device::heap_bottom(), heap_size);
+        logging::init().expect("log initialization failed");
         inner.replace(Self {
             static_resources: Vec::new(),
             executor: executor::Executor::new(),
         });
         let rt = Self::get();
         rt.configure(resource_configuration);
-        logging::init().expect("log initialization failed");
-        trace!("test");
         init_closure();
         Ok(rt)
     }
@@ -116,10 +115,12 @@ impl Runtime {
     }
     pub fn get_resource_id(&mut self, uri: &str) -> Result<ResourceID, RuntimeError> {
         use core::convert::TryFrom;
-        let mut buffer = String::new();
+        use core::str::from_utf8_mut;
+        let mut array = [0u8; 255];
+        let buffer: &mut str = from_utf8_mut(&mut array).unwrap();
         for i in 0..self.static_resources.len() {
             let parsed_uri = Uri::try_from(uri).or(Err(RuntimeError::UriParseError))?;
-            if self.static_resources[i].to_uri(&mut buffer) == parsed_uri {
+            if self.static_resources[i].to_uri(buffer) == parsed_uri {
                 return Ok(ResourceID(i as u8));
             }
         }
@@ -143,14 +144,12 @@ impl Runtime {
         loop {
             self.executor.run();
             trace!("sleep");
-            //TODO: move to device
-            cortex_m::asm::wfe(); // safe power till cpu event
+            crate::device::sleep();
         }
     }
     pub fn spawn_task(&mut self, task: Task) {
         trace!("spawn");
         self.executor.spawn(task);
-        trace!("endspawn");
     }
     fn configure(&mut self, configurations: &[ComponentConfiguration]) {
         for configuration in configurations {

@@ -76,11 +76,8 @@ impl Executor {
     }
 
     pub fn spawn(&mut self, task: Task) {
-        trace!("enqueue");
         self.task_queue.enqueue(task.id).expect("task queue full");
-        trace!("insert");
         self.tasks.insert(task.id, task);
-        trace!("end");
     }
     fn reque(&mut self, task_id: TaskID) {
         self.task_queue.enqueue(task_id).expect("task queue full")

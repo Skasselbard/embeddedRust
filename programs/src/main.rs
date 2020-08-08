@@ -19,7 +19,7 @@ fn main() -> ! {
             ]
     });
     let rt = Runtime::init(HEAP_SIZE, &configurations, init_closure).expect("InitError");
-    rt.spawn_task(Task::new(example_task()));
+    // rt.spawn_task(Task::new(example_task()));
     rt.spawn_task(Task::new(test_task()));
     rt.run();
 }
@@ -27,7 +27,7 @@ fn main() -> ! {
 async fn test_task() {
     let mut gpio = Runtime::get().get_resource_id("digital:gpio/pa0").unwrap();
     while let Some(_event) = gpio.read_stream().next().await {
-        hprintln!("GPIOEVENT IN MAIN");
+        hprintln!("GPIOEVENT IN MAIN {}", _event);
     }
 }
 

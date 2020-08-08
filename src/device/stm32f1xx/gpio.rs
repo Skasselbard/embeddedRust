@@ -1,4 +1,5 @@
-use super::{ComponentConfiguration, Pin};
+use super::ComponentConfiguration;
+use crate::device::{Pin, TriggerEdge};
 use crate::events::{self, Event};
 use crate::resources::{RegisterComponent, Resource, ResourceError};
 use crate::{Runtime, RuntimeError, Task};
@@ -16,10 +17,17 @@ use stm32f1xx_hal::gpio::{
 };
 
 fn gpios() -> &'static mut Gpios {
-    use core::ops::DerefMut;
-    use once_cell::unsync::Lazy;
-    static mut GPIOS: Lazy<Gpios> = Lazy::new(|| Gpios::new());
-    unsafe { GPIOS.deref_mut() }
+    // use core::ops::DerefMut;
+    // use once_cell::unsync::Lazy;
+    // static mut GPIOS: Lazy<Gpios> = Lazy::new(|| Gpios::new());
+    // unsafe { GPIOS.deref_mut() }
+    static mut GPIOS: Option<Gpios> = None;
+    unsafe {
+        if let None = GPIOS {
+            GPIOS = Some(Gpios::new());
+        }
+        GPIOS.as_mut().unwrap()
+    }
 }
 
 pub trait InputPin: v2::InputPin<Error = Infallible> {}
@@ -86,13 +94,6 @@ pub enum Direction {
 }
 
 #[derive(Eq, PartialEq, Clone, Copy, Debug, Hash)]
-pub enum TriggerEdge {
-    Rising,
-    Falling,
-    All,
-}
-
-#[derive(Eq, PartialEq, Clone, Copy, Debug, Hash)]
 pub enum PinMode {
     Analog,
     Floating,
@@ -132,7 +133,7 @@ impl Gpio {
     }
 }
 impl Gpios {
-    const fn new() -> Self {
+    fn new() -> Self {
         Gpios {
             input: BTreeMap::new(),
             output: BTreeMap::new(),

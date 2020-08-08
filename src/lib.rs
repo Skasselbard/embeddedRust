@@ -1,7 +1,6 @@
 #![no_std]
 #![feature(const_fn)]
 #![feature(alloc_error_handler)]
-#![feature(const_btree_new)]
 
 extern crate alloc;
 
@@ -20,7 +19,7 @@ mod logging;
 use alloc::boxed::Box;
 use alloc::collections::BTreeMap;
 use alloc::string::String;
-use alloc::vec::Vec;
+// use alloc::vec::Vec;
 use core::panic::PanicInfo;
 use core::task::Waker;
 use core::{
@@ -28,9 +27,12 @@ use core::{
     pin::Pin,
     task::{Context, Poll},
 };
-use device::stm32f1xx::ComponentConfiguration;
+use cortex_m_rt::exception;
+use device::ComponentConfiguration;
 use events::Event;
 use futures::StreamExt;
+use heapless::consts::*;
+use heapless::Vec;
 use log::trace;
 use nom_uri::Uri;
 use resources::{Resource, ResourceError, ResourceID};
@@ -51,10 +53,20 @@ fn panic(info: &PanicInfo) -> ! {
     loop {}
 }
 
+#[exception]
+fn HardFault(ef: &cortex_m_rt::ExceptionFrame) -> ! {
+    // prints the exception frame as a panic message
+    panic!("HardFault: {:#?}", ef);
+}
+
+#[exception]
+fn DefaultHandler(irqn: i16) {
+    cortex_m_semihosting::hprintln!("IRQn = {}", irqn);
+}
+
 pub struct Runtime {
-    static_resources: Vec<Box<dyn Resource>>,
+    static_resources: Vec<&'static mut dyn Resource, U64>,
     executor: executor::Executor,
-    resource_cache: BTreeMap<String, ResourceID>,
 }
 
 #[non_exhaustive]
@@ -69,27 +81,25 @@ pub enum RuntimeError {
 
 impl Runtime {
     pub fn init<F: FnOnce()>(
-        heap_bottom: usize,
         heap_size: usize,
         resource_configuration: &[ComponentConfiguration],
-        _init_closure: F,
+        init_closure: F,
     ) -> Result<&'static mut Self, RuntimeError> {
         let inner = Self::get_inner();
         if let Some(_) = inner {
             return Err(RuntimeError::MultipleInitializations);
         };
-        Self::init_heap(heap_bottom, heap_size);
-        let mut rt = Self {
-            static_resources: Vec::with_capacity(resource_configuration.len()),
+        Self::init_heap(device::heap_bottom(), heap_size);
+        inner.replace(Self {
+            static_resources: Vec::new(),
             executor: executor::Executor::new(),
-            resource_cache: BTreeMap::new(),
-        };
-        events::get_queue(); // initialize lazy static
+        });
+        let rt = Self::get();
         rt.configure(resource_configuration);
         logging::init().expect("log initialization failed");
-        inner.replace(rt);
-        // init_closure();
-        Ok(Self::get())
+        trace!("test");
+        init_closure();
+        Ok(rt)
     }
     fn get_inner() -> &'static mut Option<Self> {
         static mut RUNTIME: Option<Runtime> = None;
@@ -98,38 +108,24 @@ impl Runtime {
     pub fn get() -> &'static mut Runtime {
         Self::get_inner().as_mut().expect("uninitialized runtime")
     }
-    fn get_resource(&mut self, id: &ResourceID) -> Result<&mut dyn Resource, RuntimeError> {
-        Ok(self
+    fn get_resource(&'static mut self, id: &ResourceID) -> &'static mut dyn Resource {
+        *self
             .static_resources
             .get_mut(id.0 as usize)
             .expect("Resource id not found in vector")
-            .as_mut())
     }
     pub fn get_resource_id(&mut self, uri: &str) -> Result<ResourceID, RuntimeError> {
         use core::convert::TryFrom;
-        match self.resource_cache.get(uri.into()) {
-            Some(id) => Ok(id.clone()),
-            None => {
-                let mut id = None;
-                let mut buffer = String::new();
-                for i in 0..self.static_resources.len() {
-                    let parsed_uri = Uri::try_from(uri).or(Err(RuntimeError::UriParseError))?;
-                    if self.static_resources[i].to_uri(&mut buffer) == parsed_uri {
-                        id = Some(ResourceID(i as u8));
-                        break;
-                    }
-                }
-                match id {
-                    Some(id) => {
-                        self.resource_cache.insert(uri.into(), id.clone());
-                        Ok(id)
-                    }
-                    None => Err(RuntimeError::ResourceNotFound),
-                }
+        let mut buffer = String::new();
+        for i in 0..self.static_resources.len() {
+            let parsed_uri = Uri::try_from(uri).or(Err(RuntimeError::UriParseError))?;
+            if self.static_resources[i].to_uri(&mut buffer) == parsed_uri {
+                return Ok(ResourceID(i as u8));
             }
         }
+        Err(RuntimeError::ResourceNotFound)
     }
-    fn add_resource(&mut self, resource: Box<dyn Resource>) -> ResourceID {
+    fn add_resource(&mut self, resource: &'static mut dyn Resource) -> ResourceID {
         let id = self.static_resources.len();
         self.static_resources.push(resource);
         ResourceID(id as u8)
@@ -152,14 +148,18 @@ impl Runtime {
         }
     }
     pub fn spawn_task(&mut self, task: Task) {
-        self.executor.spawn(task)
+        trace!("spawn");
+        self.executor.spawn(task);
+        trace!("endspawn");
     }
     fn configure(&mut self, configurations: &[ComponentConfiguration]) {
         for configuration in configurations {
-            let resource: Box<dyn Resource> = match configuration {
-                ComponentConfiguration::Gpio(gpio) => Box::new(gpio.clone()),
+            let resource: &dyn Resource = match configuration {
+                ComponentConfiguration::Gpio(gpio) => gpio,
                 _ => unimplemented!(),
             };
+            // TODO: maybe cloning is somehow possible
+            let resource = unsafe { &mut *(resource as *const dyn Resource as *mut dyn Resource) };
             self.add_resource(resource);
         }
     }
@@ -173,7 +173,7 @@ impl ResourceID {
     pub fn read_stream(&mut self) -> impl StreamExt<Item = u8> {
         use futures::stream::poll_fn;
         let id = *self;
-        poll_fn(move |cx| Runtime::get().get_resource(&id).unwrap().read_next(cx))
+        poll_fn(move |cx| Runtime::get().get_resource(&id).read_next(cx))
         // struct S {
         //     id: ResourceID,
         // };
@@ -191,7 +191,7 @@ impl ResourceID {
     ) -> Result<(), ResourceError> {
         use futures::future::poll_fn;
 
-        let res = Runtime::get().get_resource(self).unwrap();
+        let res = Runtime::get().get_resource(self);
         while let Some(byte) = stream.next().await {
             poll_fn(|cx| (res.write_next(cx, byte))).await?
         }
@@ -199,9 +199,9 @@ impl ResourceID {
     }
     pub async fn seek(&mut self, pos: usize) -> Result<(), ResourceError> {
         use futures::future::poll_fn;
-        poll_fn(|cx| Runtime::get().get_resource(self).unwrap().seek(cx, pos)).await
+        poll_fn(|cx| Runtime::get().get_resource(self).seek(cx, pos)).await
     }
     pub fn to_uri<'uri>(&self, buffer: &'uri mut str) -> Uri<'uri> {
-        Runtime::get().get_resource(self).unwrap().to_uri(buffer)
+        Runtime::get().get_resource(self).to_uri(buffer)
     }
 }

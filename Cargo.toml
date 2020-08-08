@@ -11,8 +11,10 @@ members = ["embedded_rust_macros", "programs"]
 cortex-m = "0.6.3"
 cortex-m-rt = "0.6.12"
 cortex-m-semihosting = "0.3.5"
+crossbeam-queue = {version = "0.2.3", default-features = false, features = ["alloc"]}
 embedded-hal = {version = "0.2.4"}
 futures = {version = "0.3.5", default-features = false}
+heapless = "0.5.5"
 linked_list_allocator = {version = "0.8.4"}
 log = "0.4.11"
 nb = "1.0.0"

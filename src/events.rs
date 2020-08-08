@@ -1,18 +1,17 @@
-use crate::device::stm32f1xx::ExtiEvent;
-use alloc::collections::VecDeque;
-use core::ops::DerefMut;
+use crate::device::ExtiEvent;
 use cortex_m::interrupt::CriticalSection;
-use once_cell::unsync::Lazy;
+use heapless::consts::*;
+use heapless::spsc::{Queue, SingleCore};
 
-pub(crate) fn get_queue() -> &'static mut VecDeque<Event> {
+pub(crate) fn get_queue() -> &'static mut Queue<Event, U32, u8, SingleCore> {
     // TODO: prevent heap allocations in interrupts!
     // TODO: make it a stream? from futures-util
     // static mut EVENT_QUEUE: Lazy<VecDeque<Event>> = Lazy::new(|| VecDeque::with_capacity(10));
     // unsafe { EVENT_QUEUE.deref_mut() }
-    static mut EVENT_QUEUE: Option<VecDeque<Event>> = None;
+    static mut EVENT_QUEUE: Option<Queue<Event, U32, u8, SingleCore>> = None;
     unsafe {
         if let None = EVENT_QUEUE {
-            EVENT_QUEUE = Some(VecDeque::with_capacity(10));
+            EVENT_QUEUE = Some(Queue::u8_sc());
         }
         EVENT_QUEUE.as_mut().unwrap()
     }
@@ -28,12 +27,12 @@ pub enum Event {
 //TODO: add critical section?
 pub fn next() -> Option<Event> {
     log::trace!("get next event");
-    get_queue().pop_front()
+    get_queue().dequeue()
 }
 
 pub fn push(event: Event, _cs: &CriticalSection) {
     log::trace!("push event {:?}", event);
-    get_queue().push_back(event)
+    get_queue().enqueue(event).expect("filled event_queue")
 }
 
 impl core::fmt::Debug for Event {

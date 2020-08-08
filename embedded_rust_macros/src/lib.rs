@@ -24,7 +24,7 @@ pub fn configure_device(input: TokenStream) -> TokenStream {
         use stm32f1xx_hal::gpio::{Edge, ExtiPin};
         use stm32f1xx_hal::prelude::*;
         use stm32f1xx_hal::pac;
-        use embedded_rust::device::stm32f1xx::{
+        use embedded_rust::device::{
             PinMode, Direction, Pin, Gpio, ComponentConfiguration, TriggerEdge, Channel, Port
         };
         use embedded_rust::resources::RegisterComponent;

@@ -1,8 +1,11 @@
 use super::*;
 use crate::events::Event;
-use alloc::collections::{BTreeMap, BinaryHeap};
+use alloc::collections::BTreeMap;
+use alloc::vec::Vec;
 use core::sync::atomic::AtomicUsize;
 use core::task::{RawWaker, RawWakerVTable, Waker};
+use heapless::consts::*;
+use heapless::spsc::{Queue, SingleCore};
 use log::trace;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
@@ -10,7 +13,6 @@ struct TaskID(usize);
 
 pub struct Task {
     id: TaskID,
-    priority: usize,
     /// TODO: Maybe consider stack pinning:
     /// https://doc.rust-lang.org/stable/std/pin/index.html#projections-and-structural-pinning
     /// as mentioned in phil oppps blog:
@@ -20,7 +22,7 @@ pub struct Task {
 
 pub struct Executor {
     tasks: BTreeMap<TaskID, Task>,
-    task_queue: BinaryHeap<TaskID>,
+    task_queue: Queue<TaskID, U256, u8, SingleCore>,
     /// If an event is fired, these wakers requeue the corresponding tasks
     event_wakers: BTreeMap<Event, Vec<Waker>>,
 }
@@ -34,7 +36,7 @@ fn raw_waker(task: *const ()) -> RawWaker {
     fn wake_by_ref(task: *const ()) {
         unsafe { Runtime::get().executor.reque((*(task as *const Task)).id) }
     }
-    fn drop(task: *const ()) {}
+    fn drop(_task: *const ()) {}
 
     let vtable = &RawWakerVTable::new(clone, wake, wake_by_ref, drop);
     RawWaker::new(task, vtable)
@@ -49,11 +51,10 @@ impl TaskID {
 
 impl Task {
     /// zero is highest priority
-    pub fn new(priority: usize, future: impl Future<Output = ()> + 'static) -> Task {
+    pub fn new(future: impl Future<Output = ()> + 'static) -> Task {
         Task {
             id: TaskID::new(),
             future: Box::pin(future),
-            priority,
         }
     }
     fn poll(&mut self, context: &mut Context) -> Poll<()> {
@@ -69,23 +70,26 @@ impl Executor {
     pub fn new() -> Executor {
         Executor {
             tasks: BTreeMap::new(),
-            task_queue: BinaryHeap::new(),
+            task_queue: unsafe { Queue::u8_sc() },
             event_wakers: BTreeMap::new(),
         }
     }
 
     pub fn spawn(&mut self, task: Task) {
-        self.task_queue.push(task.id);
+        trace!("enqueue");
+        self.task_queue.enqueue(task.id).expect("task queue full");
+        trace!("insert");
         self.tasks.insert(task.id, task);
+        trace!("end");
     }
     fn reque(&mut self, task_id: TaskID) {
-        self.task_queue.push(task_id)
+        self.task_queue.enqueue(task_id).expect("task queue full")
     }
     pub fn run(&mut self) {
         trace!("executor");
         loop {
             self.wake_tasks();
-            if let Some(task_id) = self.task_queue.pop() {
+            if let Some(task_id) = self.task_queue.dequeue() {
                 let task = self.tasks.get_mut(&task_id).expect("missing task");
                 let waker = task.waker();
                 let mut context = Context::from_waker(&waker);
@@ -100,13 +104,16 @@ impl Executor {
     }
 
     fn wake_tasks(&mut self) {
-        for (event, wakers) in self.event_wakers.iter() {
-            trace!("event: {:?}", event);
-            for waker in wakers.into_iter() {
-                waker.wake_by_ref()
+        //TODO: remove duplicates
+        for event in events::get_queue().into_iter() {
+            if let Some(wakers) = self.event_wakers.get(event) {
+                trace!("event: {:?}", event);
+                for waker in wakers.into_iter() {
+                    waker.wake_by_ref()
+                }
+                // TODO: test and delete
+                assert!(wakers.is_empty());
             }
-            // TODO: test and delete
-            assert!(wakers.is_empty());
         }
     }
 
@@ -124,16 +131,16 @@ impl Executor {
 impl Eq for Task {}
 impl PartialEq for Task {
     fn eq(&self, other: &Self) -> bool {
-        core::ptr::eq(&self.priority, &other.priority)
+        core::ptr::eq(&self.id, &other.id)
     }
 }
-impl Ord for Task {
-    fn cmp(&self, other: &Self) -> core::cmp::Ordering {
-        self.priority.cmp(&other.priority)
-    }
-}
-impl PartialOrd for Task {
-    fn partial_cmp(&self, other: &Self) -> Option<core::cmp::Ordering> {
-        Some(self.cmp(other))
-    }
-}
+// impl Ord for Task {
+//     fn cmp(&self, other: &Self) -> core::cmp::Ordering {
+//         self.priority.cmp(&other.priority)
+//     }
+// }
+// impl PartialOrd for Task {
+//     fn partial_cmp(&self, other: &Self) -> Option<core::cmp::Ordering> {
+//         Some(self.cmp(other))
+//     }
+// }

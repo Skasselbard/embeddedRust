@@ -7,36 +7,28 @@ use nom_uri::ToUri;
 pub use pwm::*;
 pub use usart::*;
 
-use core::cmp::Ordering;
-
 pub type DeviceInterrupt = stm32f1xx_hal::device::Interrupt;
+
+/// The heap starts after the data segments of static values (.data and .bss)
+/// #[link_section] places the annotated static directly at the given data segment.
+/// We can use the adress of this static to determine the start of the heap
+/// if we use the .uninit segment (unoccupied data after .bss) as section.
+/// See the [cortex-m-rt documentation](https://docs.rs/cortex-m-rt/0.6.12/cortex_m_rt/#uninitialized-static-variables) and [link section reference](https://doc.rust-lang.org/reference/abi.html#the-link_section-attribute) for mor information
+pub fn heap_bottom() -> usize {
+    #[link_section = ".uninit"]
+    static HEAP_BOTTOM: usize = 0;
+    &HEAP_BOTTOM as *const usize as usize
+}
+
+pub fn sleep() {
+    cortex_m::asm::wfe()
+}
 
 pub enum ComponentConfiguration {
     Clock,
     Gpio(Gpio),
     Usart,
     Pwm,
-}
-
-pub struct GpioConfig {}
-
-/// Pin ID
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-pub struct Pin {
-    channel: Channel,
-    port: Port,
-}
-
-impl Pin {
-    pub fn new(channel: Channel, port: Port) -> Self {
-        Self { channel, port }
-    }
-    pub fn channel(&self) -> Channel {
-        self.channel
-    }
-    pub fn port(&self) -> Port {
-        self.port
-    }
 }
 
 impl<'uri> ToUri<'uri> for ComponentConfiguration {
@@ -48,19 +40,6 @@ impl<'uri> ToUri<'uri> for ComponentConfiguration {
     }
 }
 
-impl Ord for Pin {
-    fn cmp(&self, other: &Self) -> Ordering {
-        self.port
-            .cmp(&other.port)
-            .then(self.channel.cmp(&other.channel))
-    }
-}
-
-impl PartialOrd for Pin {
-    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
-        Some(self.cmp(other))
-    }
-}
 /// consider configuring clocks before adc construction:
 /// ```
 /// let clocks = rcc.cfgr.adcclk(2.mhz()).freeze(&mut flash.acr);

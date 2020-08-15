@@ -5,11 +5,14 @@ use log::{Level, LevelFilter, Metadata, Record, SetLoggerError};
 struct SimpleLogger;
 static LOGGER: SimpleLogger = SimpleLogger;
 
+// TODO: Multicore on feature
 pub fn init() -> Result<(), SetLoggerError> {
-    if cfg!(debug_assertions) {
-        log::set_logger(&LOGGER).map(|()| log::set_max_level(LevelFilter::Trace))
-    } else {
-        log::set_logger(&LOGGER).map(|()| log::set_max_level(LevelFilter::Info))
+    unsafe {
+        if cfg!(debug_assertions) {
+            log::set_logger_racy(&LOGGER).map(|()| log::set_max_level(LevelFilter::Trace))
+        } else {
+            log::set_logger_racy(&LOGGER).map(|()| log::set_max_level(LevelFilter::Info))
+        }
     }
 }
 

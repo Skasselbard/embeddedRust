@@ -1,6 +1,7 @@
 [package]
 authors = ["Tom Meyer <tom.meyer@uni-rostock.de>"]
 edition = "2018"
+# TODO: Rename: Ember, Cinder, Ignite, enclose... all names taken^^
 name = "embedded_rust"
 version = "0.2.0"
 

@@ -1,5 +1,6 @@
 [package]
 authors = ["\"tom\" <\"tom.meyer89@gmail.com\">"]
+default-run = "main"
 edition = "2018"
 name = "programs"
 version = "0.1.0"
@@ -21,4 +22,10 @@ stm32f1xx-hal = {version = "0.6.1", features = ["stm32f103", "rt", "medium"]}
 bench = false
 name = "main"
 path = "src/main.rs"
+test = false
+
+[[bin]]
+bench = false
+name = "main_expanded"
+path = "src/main_expanded.rs"
 test = false

@@ -3,6 +3,8 @@ use cortex_m::interrupt::CriticalSection;
 use heapless::consts::*;
 use heapless::spsc::{Queue, SingleCore};
 
+// TODO: multicore with feature
+#[inline]
 pub(crate) fn get_queue() -> &'static mut Queue<Event, U32, u8, SingleCore> {
     // TODO: prevent heap allocations in interrupts!
     // TODO: make it a stream? from futures-util
@@ -25,11 +27,13 @@ pub enum Event {
 }
 
 //TODO: add critical section?
+#[inline]
 pub fn next() -> Option<Event> {
     log::trace!("get next event");
     get_queue().dequeue()
 }
 
+#[inline]
 pub fn push(event: Event, _cs: &CriticalSection) {
     log::trace!("push event {:?}", event);
     get_queue().enqueue(event).expect("filled event_queue")

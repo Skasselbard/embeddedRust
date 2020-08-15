@@ -2,32 +2,22 @@ use super::ComponentConfiguration;
 use crate::device::{Pin, TriggerEdge};
 use crate::events::{self, Event};
 use crate::resources::{RegisterComponent, Resource, ResourceError};
-use crate::{Runtime, RuntimeError, Task};
+use crate::{Runtime, RuntimeError};
 use alloc::boxed::Box;
-use alloc::collections::{BTreeMap, BTreeSet};
+use alloc::collections::BTreeMap;
 use core::convert::Infallible;
-use core::sync::atomic::{AtomicUsize, Ordering};
 use core::task::{Context, Poll};
 use embedded_hal::digital::v2;
 use nom_uri::{ToUri, Uri};
 use stm32f1xx_hal::device::interrupt;
-use stm32f1xx_hal::gpio::{
-    gpioa, gpiob, gpioc, gpiod, Alternate, Analog, ExtiPin, Floating, Input, OpenDrain, Output,
-    PullDown, PullUp, PushPull, Pxx,
-};
+use stm32f1xx_hal::gpio::{gpioa, gpiob, gpioc, Analog, ExtiPin, Floating, Input, Output, Pxx};
 
+#[inline]
 fn gpios() -> &'static mut Gpios {
-    // use core::ops::DerefMut;
-    // use once_cell::unsync::Lazy;
-    // static mut GPIOS: Lazy<Gpios> = Lazy::new(|| Gpios::new());
-    // unsafe { GPIOS.deref_mut() }
-    static mut GPIOS: Option<Gpios> = None;
-    unsafe {
-        if let None = GPIOS {
-            GPIOS = Some(Gpios::new());
-        }
-        GPIOS.as_mut().unwrap()
-    }
+    use core::ops::DerefMut;
+    use once_cell::unsync::Lazy;
+    static mut GPIOS: Lazy<Gpios> = Lazy::new(|| Gpios::new());
+    unsafe { GPIOS.deref_mut() }
 }
 
 pub trait InputPin: v2::InputPin<Error = Infallible> {}
@@ -103,12 +93,14 @@ pub enum PinMode {
     PushPull,
 }
 
+// TODO: can be heapless
 pub struct Gpios {
     input: BTreeMap<Gpio, Box<dyn InputPin>>,
     output: BTreeMap<Gpio, Box<dyn OutputPin>>,
 }
 
 impl Gpio {
+    #[inline]
     pub fn new(pin: Pin, direction: Direction, mode: PinMode) -> Self {
         Gpio {
             id: pin,
@@ -116,23 +108,52 @@ impl Gpio {
             mode,
         }
     }
+    #[inline]
     pub fn id(&self) -> Pin {
         self.id
     }
+    #[inline]
     pub fn channel(&self) -> Channel {
         self.id.channel()
     }
+    #[inline]
     pub fn port(&self) -> Port {
         self.id.port()
     }
+    #[inline]
     pub fn direction(&self) -> Direction {
         self.direction
     }
+    #[inline]
     pub fn mode(&self) -> PinMode {
         self.mode
     }
 }
+impl GpioEvent {
+    pub fn from_uri(uri: Uri, config: &[ComponentConfiguration]) -> Result<Self, RuntimeError> {
+        use crate::schemes::{Scheme, Virtual};
+        use core::str::FromStr;
+        if let Ok(Scheme::V(Virtual::Event)) = Scheme::from_str(uri.scheme()) {
+            for component in config {
+                if let ComponentConfiguration::Gpio(Gpio {
+                    direction: Direction::Input(Some(_)),
+                    id,
+                    ..
+                }) = component
+                {
+                    return Ok(Self {
+                        event: false,
+                        id: *id,
+                    });
+                }
+            }
+        }
+        Err(RuntimeError::ResourceNotFound)
+    }
+}
+
 impl Gpios {
+    #[inline]
     fn new() -> Self {
         Gpios {
             input: BTreeMap::new(),
@@ -246,9 +267,9 @@ impl Resource for Gpio {
     fn seek(&mut self, _: &mut Context, _: usize) -> Poll<Result<(), ResourceError>> {
         Poll::Ready(Ok(()))
     }
-    fn to_uri<'uri>(&self, buffer: &'uri mut str) -> nom_uri::Uri<'uri> {
-        (self as &dyn ToUri).to_uri(buffer)
-    }
+    // fn to_uri<'uri>(&self, buffer: &'uri mut str) -> nom_uri::Uri<'uri> {
+    //     (self as &dyn ToUri).to_uri(buffer)
+    // }
 }
 
 impl Resource for GpioEvent {
@@ -268,13 +289,13 @@ impl Resource for GpioEvent {
     fn seek(&mut self, _: &mut Context, _: usize) -> Poll<Result<(), ResourceError>> {
         Poll::Ready(Ok(()))
     }
-    fn to_uri<'uri>(&self, buffer: &'uri mut str) -> nom_uri::Uri<'uri> {
-        (self as &dyn ToUri).to_uri(buffer)
-    }
+    // fn to_uri<'uri>(&self, buffer: &'uri mut str) -> nom_uri::Uri<'uri> {
+    //     (self as &dyn ToUri).to_uri(buffer)
+    // }
 }
 
-impl<'uri> ToUri<'uri> for Gpio {
-    fn to_uri(&self, buffer: &'uri mut str) -> Uri<'uri> {
+impl ToUri for Gpio {
+    fn to_uri<'uri>(&self, buffer: &'uri mut str) -> Uri<'uri> {
         use crate::resources::StrWriter;
         use core::fmt::Write;
         let scheme = match self.mode() {
@@ -288,8 +309,8 @@ impl<'uri> ToUri<'uri> for Gpio {
     }
 }
 
-impl<'uri> ToUri<'uri> for GpioEvent {
-    fn to_uri(&self, buffer: &'uri mut str) -> Uri<'uri> {
+impl ToUri for GpioEvent {
+    fn to_uri<'uri>(&self, buffer: &'uri mut str) -> Uri<'uri> {
         use crate::resources::StrWriter;
         use core::fmt::Write;
         let mut buffer = StrWriter::from(buffer);

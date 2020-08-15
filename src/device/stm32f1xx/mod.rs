@@ -14,12 +14,13 @@ pub type DeviceInterrupt = stm32f1xx_hal::device::Interrupt;
 /// We can use the adress of this static to determine the start of the heap
 /// if we use the .uninit segment (unoccupied data after .bss) as section.
 /// See the [cortex-m-rt documentation](https://docs.rs/cortex-m-rt/0.6.12/cortex_m_rt/#uninitialized-static-variables) and [link section reference](https://doc.rust-lang.org/reference/abi.html#the-link_section-attribute) for mor information
+#[inline]
 pub fn heap_bottom() -> usize {
     #[link_section = ".uninit"]
     static HEAP_BOTTOM: usize = 0;
     &HEAP_BOTTOM as *const usize as usize
 }
-
+#[inline]
 pub fn sleep() {
     cortex_m::asm::wfe()
 }
@@ -31,8 +32,8 @@ pub enum ComponentConfiguration {
     Pwm,
 }
 
-impl<'uri> ToUri<'uri> for ComponentConfiguration {
-    fn to_uri(&self, buffer: &'uri mut str) -> nom_uri::Uri<'uri> {
+impl ToUri for ComponentConfiguration {
+    fn to_uri<'uri>(&self, buffer: &'uri mut str) -> nom_uri::Uri<'uri> {
         match self {
             ComponentConfiguration::Gpio(gpio) => gpio.to_uri(buffer),
             _ => unimplemented!(),

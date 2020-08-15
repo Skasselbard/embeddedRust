@@ -1,9 +1,19 @@
 use super::ComponentConfiguration;
+use crate::Runtime;
 use core::task::{Context, Poll};
+use futures::StreamExt;
 use nom_uri::Uri;
 
 #[derive(Copy, Clone, PartialEq, Eq, Debug, Hash)]
-pub struct ResourceID(pub u8);
+pub enum ResourceID {
+    Sys(u8),
+    InputGpio(u8),
+    OutputGpio(u8),
+    PWM(u8),
+    Channel(u8),
+    Serial(u8),
+    Timer(u8),
+}
 
 #[non_exhaustive]
 #[derive(Debug)]
@@ -16,26 +26,15 @@ pub enum ResourceError {
     NotFound,
     /// The resource is ill configured for the desired task
     ConfigurationError,
+    WriteError,
 }
 
 pub trait RegisterComponent {
     fn register_component(self, configuration: ComponentConfiguration);
 }
 
-// #[allow(unused)]
-// pub trait Resource {
-//     fn read(&mut self, buf: &mut [u8]) -> nb::Result<usize, ResourceError> {
-//         ResourceError::NonReadingResource.into()
-//     }
-//     fn write(&mut self, buf: &[u8]) -> nb::Result<usize, ResourceError> {
-//         ResourceError::NonWritingResource.into()
-//     }
-//     fn seek(&mut self, pos: usize) -> nb::Result<(), ResourceError>;
-//     fn flush(&mut self) -> nb::Result<(), ResourceError>;
-//     fn to_uri<'uri>(&self, buffer: &'uri mut str) -> Uri<'uri>;
-// }
 #[allow(unused)]
-pub trait Resource {
+pub trait Resource: Sync {
     fn read_next(&mut self, context: &mut Context) -> Poll<Option<u8>> {
         Poll::Ready(None)
     }
@@ -43,8 +42,35 @@ pub trait Resource {
         Poll::Ready(Err(ResourceError::NonWritingResource))
     }
     fn seek(&mut self, context: &mut Context, pos: usize) -> Poll<Result<(), ResourceError>>;
-    fn to_uri<'uri>(&self, buffer: &'uri mut str) -> Uri<'uri>;
 }
+
+// #[allow(unused)]
+// impl ResourceID {
+//     pub fn read_stream(&mut self) -> impl StreamExt<Item = u8> {
+//         use futures::stream::poll_fn;
+//         let id = *self;
+//         poll_fn(move |cx| Runtime::get().get_resource_object(&id).read_next(cx))
+//     }
+//     pub async fn write(
+//         &mut self,
+//         mut stream: impl StreamExt<Item = u8> + Unpin,
+//     ) -> Result<(), ResourceError> {
+//         use futures::future::poll_fn;
+
+//         let res = Runtime::get().get_resource_object(self);
+//         while let Some(byte) = stream.next().await {
+//             poll_fn(|cx| (res.write_next(cx, byte))).await?
+//         }
+//         Ok(())
+//     }
+//     pub async fn seek(&mut self, pos: usize) -> Result<(), ResourceError> {
+//         use futures::future::poll_fn;
+//         poll_fn(|cx| Runtime::get().get_resource_object(self).seek(cx, pos)).await
+//     }
+//     pub fn to_uri<'uri>(&self, buffer: &'uri mut str) -> Uri<'uri> {
+//         Runtime::get().get_resource_object(self).to_uri(buffer)
+//     }
+// }
 
 impl From<core::num::ParseFloatError> for ResourceError {
     fn from(error: core::num::ParseFloatError) -> Self {

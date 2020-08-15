@@ -22,7 +22,7 @@ pub struct Task {
 
 pub struct Executor {
     tasks: BTreeMap<TaskID, Task>,
-    task_queue: Queue<TaskID, U256, u8, SingleCore>,
+    task_queue: Queue<TaskID, U256, u8, SingleCore>, //TODO: Multicore on feature
     /// If an event is fired, these wakers requeue the corresponding tasks
     event_wakers: BTreeMap<Event, Vec<Waker>>,
 }
@@ -43,6 +43,7 @@ fn raw_waker(task: *const ()) -> RawWaker {
 }
 
 impl TaskID {
+    #[inline]
     fn new() -> Self {
         static NEXT_ID: AtomicUsize = AtomicUsize::new(0);
         TaskID(NEXT_ID.fetch_add(1, core::sync::atomic::Ordering::Relaxed))
@@ -57,16 +58,23 @@ impl Task {
             future: Box::pin(future),
         }
     }
+    #[inline]
+    pub fn spawn(self) {
+        Runtime::get().spawn_task(self)
+    }
+    #[inline]
     fn poll(&mut self, context: &mut Context) -> Poll<()> {
         self.future.as_mut().poll(context)
     }
-    // moves task into waker
+    /// moves task into waker
+    #[inline]
     fn waker(&self) -> Waker {
         unsafe { Waker::from_raw(raw_waker(self as *const Task as *const ())) }
     }
 }
 
 impl Executor {
+    #[inline]
     pub fn new() -> Executor {
         Executor {
             tasks: BTreeMap::new(),
@@ -79,6 +87,7 @@ impl Executor {
         self.task_queue.enqueue(task.id).expect("task queue full");
         self.tasks.insert(task.id, task);
     }
+    #[inline]
     fn reque(&mut self, task_id: TaskID) {
         self.task_queue.enqueue(task_id).expect("task queue full")
     }
@@ -99,7 +108,7 @@ impl Executor {
             break;
         }
     }
-
+    #[inline]
     fn wake_tasks(&mut self) {
         //TODO: remove duplicates
         for event in events::get_queue().into_iter() {

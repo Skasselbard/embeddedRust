@@ -2,13 +2,43 @@
 	"version": "2.0.0",
 	"tasks": [
 		{
+			"label": "cargo build",
 			"type": "cargo",
 			"subcommand": "build",
 			"problemMatcher": [
 				"$rustc"
 			],
 			"group": "build",
-			"label": "cargo build"
+		},
+		{
+			"label": "cargo expand",
+			"type": "shell",
+			"command": "",
+			"options": {
+				"cwd": "${workspaceFolder}/programs"
+			},
+			"args": [
+				// cargo expand
+				"cargo",
+				"expand",
+				"--bin",
+				"main",
+				"|",
+				// delete compiler_builtins crate
+				"sed",
+				"'8,9d'",
+				">",
+				"./src/main_expanded.rs;",
+				// run cargo build
+				"cargo",
+				"build",
+				"--bin",
+				"main_expanded"
+			],
+			"problemMatcher": [
+				"$rustc"
+			]
+			// "group": "build"
 		}
 	]
 }

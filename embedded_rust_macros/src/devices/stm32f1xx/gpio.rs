@@ -2,7 +2,7 @@ use crate::types::{self, Direction, PinMode, TriggerEdge};
 use crate::Component;
 use quote::format_ident;
 use serde_derive::Deserialize;
-use syn::{Ident, Type};
+use syn::{parse_str, Ident, Type};
 
 #[derive(Clone, Copy, Debug, Deserialize)]
 pub struct StmGpio(
@@ -226,5 +226,11 @@ impl types::Pin for Pin {
     }
     fn to_type(&self) -> String {
         self.name().to_uppercase()
+    }
+    fn port_constructor(&self) -> syn::Expr {
+        parse_str(&format!("Port::P{:02}", (*self as usize % 16))).unwrap()
+    }
+    fn channel_constructor(&self) -> syn::Expr {
+        parse_str(&format!("Channel::{}", self.channel().to_uppercase())).unwrap()
     }
 }

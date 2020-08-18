@@ -3,7 +3,6 @@ mod usart;
 mod gpio;
 mod pwm;
 pub use gpio::*;
-use nom_uri::ToUri;
 pub use pwm::*;
 pub use usart::*;
 
@@ -23,34 +22,4 @@ pub fn heap_bottom() -> usize {
 #[inline]
 pub fn sleep() {
     cortex_m::asm::wfe()
-}
-
-pub enum ComponentConfiguration {
-    Clock,
-    Gpio(Gpio),
-    Usart,
-    Pwm,
-}
-
-impl ToUri for ComponentConfiguration {
-    fn to_uri<'uri>(&self, buffer: &'uri mut str) -> nom_uri::Uri<'uri> {
-        match self {
-            ComponentConfiguration::Gpio(gpio) => gpio.to_uri(buffer),
-            _ => unimplemented!(),
-        }
-    }
-}
-
-/// consider configuring clocks before adc construction:
-/// ```
-/// let clocks = rcc.cfgr.adcclk(2.mhz()).freeze(&mut flash.acr);
-/// ```
-/// ## return
-/// (adc, (channel1, channel2, .. ))
-#[macro_export]
-macro_rules! adc1 {
-    ($gpioa:expr, $peripherals:expr, $rcc:expr, $clocks:expr, $($pina:expr),+) => {{
-        let adc = adc::Adc::adc1($peripherals.ADC1, &mut $rcc.apb2, $clocks);
-        (adc, ($($pina.into_analog(&mut $gpioa.crl)),+))
-    }};
 }

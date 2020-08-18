@@ -8,6 +8,7 @@ use crate::generation::*;
 use crate::types::{self, Direction, Gpio, Pin, PinMode, TriggerEdge};
 use quote::format_ident;
 use serde_derive::Deserialize;
+use syn::parse_str;
 
 /// The Generator struct is used to introduce all code generation functions.
 /// It has to implement the Generator trait.
@@ -140,5 +141,11 @@ impl Pin for DummyPin {
     }
     fn to_type(&self) -> std::string::String {
         self.name().to_uppercase()
+    }
+    fn port_constructor(&self) -> syn::Expr {
+        parse_str(&format!("Port::P{:02}", (*self as usize))).unwrap()
+    }
+    fn channel_constructor(&self) -> syn::Expr {
+        parse_str(&format!("Channel::A")).unwrap()
     }
 }

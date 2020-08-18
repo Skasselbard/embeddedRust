@@ -29,13 +29,13 @@ pub enum Event {
 //TODO: add critical section?
 #[inline]
 pub fn next() -> Option<Event> {
-    log::trace!("get next event");
+    // log::trace!("get next event");
     get_queue().dequeue()
 }
 
 #[inline]
 pub fn push(event: Event, _cs: &CriticalSection) {
-    log::trace!("push event {:?}", event);
+    // log::trace!("push event {:?}", event);
     get_queue().enqueue(event).expect("filled event_queue")
 }
 

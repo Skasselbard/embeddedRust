@@ -1,6 +1,4 @@
 mod cortex_m;
-pub mod pwm;
-pub mod usart;
 
 #[cfg(feature = "stm32f1xx")]
 mod stm32f1xx;
@@ -10,19 +8,18 @@ pub(crate) use self::cortex_m::init_heap;
 use stm32f1xx as dev;
 
 use crate::resources::ResourceError;
-use crate::{Resource, ResourceID, RuntimeError, Task};
+use crate::resources::StrWriter;
+use crate::{Resource, ResourceID, RuntimeError};
 use core::cmp::Ordering;
+use core::fmt::Write;
 use core::task::{Context, Poll};
 use embedded_hal::digital::v2;
-use nom_uri::ToUri;
+use nom_uri::Uri;
 
-pub type ComponentConfiguration = dev::ComponentConfiguration;
 pub type ExtiEvent = dev::ExtiEvent;
-pub type PinMode = dev::PinMode;
-pub type Direction = dev::Direction;
-pub type Gpio = dev::Gpio;
 pub type Channel = dev::Channel;
 pub type Port = dev::Port;
+pub type GpioEvent = dev::GpioEvent;
 
 pub trait Device<InputError, OutputError> {
     fn init() -> Self;
@@ -87,8 +84,14 @@ pub struct SysClock {
     clock: usize,
     index: u8,
 }
-pub struct InputPin<Pin: 'static>(Pin);
-pub struct OutputPin<Pin: 'static>(Pin);
+pub struct InputPin<HalPin: 'static> {
+    id: Pin,
+    resource: HalPin,
+}
+pub struct OutputPin<HalPin: 'static> {
+    id: Pin,
+    resource: HalPin,
+}
 
 impl Resource for Heap {
     fn read_next(&mut self, _: &mut Context) -> Poll<Option<u8>> {
@@ -102,6 +105,11 @@ impl Resource for Heap {
         _: usize,
     ) -> core::task::Poll<core::result::Result<(), ResourceError>> {
         Poll::Ready(Ok(()))
+    }
+    fn to_uri<'uri>(&self, buffer: &'uri mut str) -> nom_uri::Uri<'uri> {
+        let mut buffer = StrWriter::from(buffer);
+        write!(buffer, "Sys:heap").unwrap();
+        Uri::parse(buffer.buffer().unwrap()).unwrap()
     }
 }
 impl Heap {
@@ -122,6 +130,11 @@ impl Resource for SysClock {
     ) -> core::task::Poll<core::result::Result<(), ResourceError>> {
         Poll::Ready(Ok(()))
     }
+    fn to_uri<'uri>(&self, buffer: &'uri mut str) -> nom_uri::Uri<'uri> {
+        let mut buffer = StrWriter::from(buffer);
+        write!(buffer, "Sys:clock").unwrap();
+        Uri::parse(buffer.buffer().unwrap()).unwrap()
+    }
 }
 impl SysClock {
     pub fn new(clock_in_hertz: usize) -> Self {
@@ -141,15 +154,20 @@ impl Resource for () {
     ) -> core::task::Poll<core::result::Result<(), ResourceError>> {
         Poll::Ready(Ok(()))
     }
+    fn to_uri<'uri>(&self, buffer: &'uri mut str) -> nom_uri::Uri<'uri> {
+        let mut buffer = StrWriter::from(buffer);
+        write!(buffer, "Sys:error").unwrap();
+        Uri::parse(buffer.buffer().unwrap()).unwrap()
+    }
 }
 
-impl<Pin, Error> Resource for InputPin<Pin>
+impl<HalPin, Error> Resource for InputPin<HalPin>
 where
-    Pin: v2::InputPin<Error = Error> + Sync,
+    HalPin: v2::InputPin<Error = Error> + Sync,
     Error: core::fmt::Display,
 {
     fn read_next(&mut self, _: &mut Context) -> Poll<Option<u8>> {
-        match self.0.is_high() {
+        match self.resource.is_high() {
             Ok(res) => Poll::Ready(Some(res as u8)),
             Err(e) => {
                 log::error!("{}", e);
@@ -164,26 +182,40 @@ where
     ) -> core::task::Poll<core::result::Result<(), ResourceError>> {
         Poll::Ready(Ok(()))
     }
+    fn to_uri<'uri>(&self, buffer: &'uri mut str) -> nom_uri::Uri<'uri> {
+        let mut buffer = StrWriter::from(buffer);
+        write!(
+            buffer,
+            "digital:gpio/p{}{}",
+            self.id.channel(),
+            self.id.port()
+        )
+        .unwrap();
+        Uri::parse(buffer.buffer().unwrap()).unwrap()
+    }
 }
-impl<Pin, Error> InputPin<Pin>
+impl<HalPin, Error> InputPin<HalPin>
 where
-    Pin: v2::InputPin<Error = Error>,
+    HalPin: v2::InputPin<Error = Error>,
     Error: core::fmt::Display,
 {
-    pub fn new(pin: Pin) -> Self {
-        InputPin(pin)
+    pub fn new(pin: Pin, hal_pin: HalPin) -> Self {
+        InputPin {
+            id: pin,
+            resource: hal_pin,
+        }
     }
 }
 
-impl<Pin, Error> Resource for OutputPin<Pin>
+impl<HalPin, Error> Resource for OutputPin<HalPin>
 where
-    Pin: v2::OutputPin<Error = Error> + Sync,
+    HalPin: v2::OutputPin<Error = Error> + Sync,
     Error: core::fmt::Display,
 {
-    fn write_next(&mut self, context: &mut Context, byte: u8) -> Poll<Result<(), ResourceError>> {
+    fn write_next(&mut self, _context: &mut Context, byte: u8) -> Poll<Result<(), ResourceError>> {
         let res = match byte != 0 {
-            true => self.0.set_high(),
-            false => self.0.set_low(),
+            true => self.resource.set_high(),
+            false => self.resource.set_low(),
         };
         if let Err(e) = &res {
             log::error!("{}", e);
@@ -197,14 +229,28 @@ where
     ) -> core::task::Poll<core::result::Result<(), ResourceError>> {
         Poll::Ready(Ok(()))
     }
+    fn to_uri<'uri>(&self, buffer: &'uri mut str) -> nom_uri::Uri<'uri> {
+        let mut buffer = StrWriter::from(buffer);
+        write!(
+            buffer,
+            "digital:gpio/p{}{}",
+            self.id.channel(),
+            self.id.port()
+        )
+        .unwrap();
+        Uri::parse(buffer.buffer().unwrap()).unwrap()
+    }
 }
-impl<Pin, Error> OutputPin<Pin>
+impl<HalPin, Error> OutputPin<HalPin>
 where
-    Pin: v2::OutputPin<Error = Error>,
+    HalPin: v2::OutputPin<Error = Error>,
     Error: core::fmt::Display,
 {
-    pub fn new(pin: Pin) -> Self {
-        OutputPin(pin)
+    pub fn new(pin: Pin, hal_pin: HalPin) -> Self {
+        OutputPin {
+            id: pin,
+            resource: hal_pin,
+        }
     }
 }
 

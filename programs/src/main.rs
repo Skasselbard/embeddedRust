@@ -2,7 +2,7 @@
 #![no_std]
 
 use cortex_m_semihosting::hprintln;
-// use futures::StreamExt;
+use futures::StreamExt;
 
 use cortex_m_rt::entry;
 use embedded_rust::Task;
@@ -26,23 +26,23 @@ struct BluePill;
 #[entry]
 fn main() -> ! {
     BluePill::init();
-    // Task::new(crate::tasks::example_task()).spawn();
-    // Task::new(test_task()).spawn();
+    Task::new(example_task()).spawn();
+    Task::new(test_task()).spawn();
     BluePill::run();
 }
 
-// pub async fn test_task() {
-//     let mut gpio = Runtime::get().get_resource("digital:gpio/pa0").unwrap();
-//     while let Some(_event) = gpio.read_stream().next().await {
-//         hprintln!("GPIOEVENT IN MAIN {}", _event);
-//     }
-// }
+pub async fn test_task() {
+    let mut gpio = BluePill::get_resource("event:gpio/pa0").unwrap();
+    while let Some(_event) = gpio.read_stream().next().await {
+        hprintln!("GPIOEVENT IN MAIN {}", _event);
+    }
+}
 
-// pub async fn async_number() -> u32 {
-//     42
-// }
+pub async fn async_number() -> u32 {
+    42
+}
 
-// pub async fn example_task() {
-//     let number = async_number().await;
-//     hprintln!("async number: {}", number);
-// }
+pub async fn example_task() {
+    let number = async_number().await;
+    hprintln!("async number: {}", number);
+}

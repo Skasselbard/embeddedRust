@@ -3,6 +3,7 @@ use serde_derive::Deserialize;
 use crate::devices::{dummy, stm32f1xx};
 use crate::generation::Generator;
 use crate::types;
+use syn::Expr;
 
 /// This is the struct that is parsed from the macro input.
 /// It is an enum where each variant determines the different boards.
@@ -78,11 +79,15 @@ pub trait Pin {
     fn channel(&self) -> String;
     /// The port of a channel. Probably a number.
     fn port(&self) -> String;
+    /// Generate the construction expression for the pin-port
+    fn port_constructor(&self) -> Expr;
     /// Can be used to build identifiers;
     fn name(&self) -> String;
     /// A complete name of the pin channel. 'gpioa' - 'gpioe' in the
     /// stm32_hal.
     fn channel_name(&self) -> String;
+    /// Generate the construction expression for the pinchannel-
+    fn channel_constructor(&self) -> Expr;
     /// In the stm32_hal, each pin has a different typ of the form
     /// Pin<Mode> (e.g. PA0<Alternate<PushPull>> or PB4<Analog>)
     /// This function should return the 'Pin' part of 'Pin<Mode>
@@ -107,7 +112,9 @@ impl Sys {
         }
     }
     pub fn sys_clock(&self) -> Option<usize> {
-        self.sys_clock.as_ref().map(|c| Frequency::from(c).0 as usize)
+        self.sys_clock
+            .as_ref()
+            .map(|c| Frequency::from(c).0 as usize)
     }
 }
 

@@ -92,7 +92,6 @@ impl Executor {
         self.task_queue.enqueue(task_id).expect("task queue full")
     }
     pub fn run(&mut self) {
-        trace!("executor");
         loop {
             self.wake_tasks();
             if let Some(task_id) = self.task_queue.dequeue() {
@@ -111,14 +110,11 @@ impl Executor {
     #[inline]
     fn wake_tasks(&mut self) {
         //TODO: remove duplicates
-        for event in events::get_queue().into_iter() {
-            if let Some(wakers) = self.event_wakers.get(event) {
-                trace!("event: {:?}", event);
-                for waker in wakers.into_iter() {
+        while let Some(event) = events::next() {
+            if let Some(wakers) = self.event_wakers.get_mut(&event) {
+                while let Some(waker) = wakers.pop() {
                     waker.wake_by_ref()
                 }
-                // TODO: test and delete
-                assert!(wakers.is_empty());
             }
         }
     }

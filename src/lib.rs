@@ -16,30 +16,31 @@ pub mod schemes;
 pub use executor::Task;
 
 use alloc::boxed::Box;
+use alloc::collections::BTreeMap;
+use core::str::from_utf8_mut;
+use core::sync::atomic::AtomicU8;
 use core::task::Waker;
 use core::{
     future::Future,
     pin::Pin,
     task::{Context, Poll},
 };
-use device::ComponentConfiguration;
-use embedded_hal::digital::v2::{InputPin, OutputPin};
+use device::GpioEvent;
 use events::Event;
-use heapless::consts::*;
-use heapless::Vec;
 use log::trace;
 use nom_uri::Uri;
 use resources::{Resource, ResourceID};
 use schemes::{Hardware, Scheme, Virtual};
 
 pub struct Runtime {
-    sys: &'static [&'static mut dyn Resource],
-    input_pins: &'static [&'static mut dyn Resource],
-    output_pins: &'static [&'static mut dyn Resource],
-    pwm: &'static [&'static mut dyn Resource],
-    channels: &'static [&'static mut dyn Resource],
-    serials: &'static [&'static mut dyn Resource],
-    timers: &'static [&'static mut dyn Resource],
+    sys: &'static mut [&'static mut dyn Resource],
+    input_pins: &'static mut [&'static mut dyn Resource],
+    output_pins: &'static mut [&'static mut dyn Resource],
+    pwm: &'static mut [&'static mut dyn Resource],
+    channels: &'static mut [&'static mut dyn Resource],
+    serials: &'static mut [&'static mut dyn Resource],
+    timers: &'static mut [&'static mut dyn Resource],
+    virtual_resources: BTreeMap<u8, Box<dyn Resource>>,
     executor: executor::Executor,
 }
 
@@ -56,13 +57,13 @@ pub enum RuntimeError {
 impl Runtime {
     pub fn init(
         heap_size: usize,
-        sys: &'static [&'static mut dyn Resource],
-        input_pins: &'static [&'static mut dyn Resource],
-        output_pins: &'static [&'static mut dyn Resource],
-        pwm: &'static [&'static mut dyn Resource],
-        channels: &'static [&'static mut dyn Resource],
-        serials: &'static [&'static mut dyn Resource],
-        timers: &'static [&'static mut dyn Resource],
+        sys: &'static mut [&'static mut dyn Resource],
+        input_pins: &'static mut [&'static mut dyn Resource],
+        output_pins: &'static mut [&'static mut dyn Resource],
+        pwm: &'static mut [&'static mut dyn Resource],
+        channels: &'static mut [&'static mut dyn Resource],
+        serials: &'static mut [&'static mut dyn Resource],
+        timers: &'static mut [&'static mut dyn Resource],
     ) -> Result<&'static mut Self, RuntimeError> {
         let inner = Self::get_inner();
         if let Some(_) = inner {
@@ -79,9 +80,9 @@ impl Runtime {
             channels,
             serials,
             timers,
+            virtual_resources: BTreeMap::new(),
         });
         let rt = Self::get();
-        // rt.configure(resource_configuration);
         Ok(rt)
     }
     #[inline]
@@ -93,102 +94,96 @@ impl Runtime {
     pub fn get() -> &'static mut Runtime {
         Self::get_inner().as_mut().expect("uninitialized runtime")
     }
-    // fn get_resource_object(&'static mut self, id: &ResourceID) -> &'static mut dyn Resource {
-    //     match id {
-    //         ResourceID::Sys(index) => {
-    //             *self.sys.get_mut(*index as usize).unwrap() as &'static mut dyn Resource
-    //         }
-    //         ResourceID::InputGpio(index) => {
-    //             *self.input_pins.get_mut(*index as usize).unwrap() as &'static mut dyn Resource
-    //         }
-    //         ResourceID::OutputGpio(index) => {
-    //             *self.output_pins.get_mut(*index as usize).unwrap() as &'static mut dyn Resource
-    //         }
-    //         ResourceID::PWM(index) => {
-    //             *self.pwm.get_mut(*index as usize).unwrap() as &'static mut dyn Resource
-    //         }
-    //         ResourceID::Channel(index) => {
-    //             *self.channels.get_mut(*index as usize).unwrap() as &'static mut dyn Resource
-    //         }
-    //         ResourceID::Serial(index) => {
-    //             *self.serials.get_mut(*index as usize).unwrap() as &'static mut dyn Resource
-    //         }
-    //         ResourceID::Timer(index) => {
-    //             *self.timers.get_mut(*index as usize).unwrap() as &'static mut dyn Resource
-    //         }
-    //     }
-    // }
-    pub fn get_resource(&mut self, uri: &str) -> Result<ResourceID, RuntimeError> {
+    fn get_resource_object(&'static mut self, id: &ResourceID) -> &'static mut dyn Resource {
+        match id {
+            ResourceID::Sys(index) => *self.sys.get_mut(*index as usize).unwrap(),
+            ResourceID::InputGpio(index) => *self.input_pins.get_mut(*index as usize).unwrap(),
+            ResourceID::OutputGpio(index) => *self.output_pins.get_mut(*index as usize).unwrap(),
+            ResourceID::PWM(index) => *self.pwm.get_mut(*index as usize).unwrap(),
+            ResourceID::Channel(index) => *self.channels.get_mut(*index as usize).unwrap(),
+            ResourceID::Serial(index) => *self.serials.get_mut(*index as usize).unwrap(),
+            ResourceID::Timer(index) => *self.timers.get_mut(*index as usize).unwrap(),
+            ResourceID::Virtual(key) => self
+                .virtual_resources
+                .get_mut(key)
+                .expect("Missing virtual Resource")
+                .as_mut(),
+        }
+    }
+    pub fn get_resource(&'static mut self, uri: &str) -> Result<ResourceID, RuntimeError> {
         use core::convert::TryFrom;
         use core::str::FromStr;
+        static NEXT_VIRTUAL_ID: AtomicU8 = AtomicU8::new(0);
         let parsed_uri = Uri::try_from(uri).or(Err(RuntimeError::UriParseError))?;
-        let resource_array = match Scheme::from_str(parsed_uri.scheme())
-            .map_err(|e| RuntimeError::ResourceNotFound)?
-        {
-            Scheme::H(Hardware::Digital) => match parsed_uri.path() {
-                path if path.starts_with("gpio") => {
-                    if let Ok(int) = self.search_resource_array(&parsed_uri, self.input_pins) {
-                        Ok(ResourceID::InputGpio(int))
-                    } else {
-                        self.search_resource_array(&parsed_uri, self.output_pins)
-                            .map(|int| ResourceID::OutputGpio(int))
+        match Scheme::from_str(parsed_uri.scheme()).map_err(|_| RuntimeError::ResourceNotFound)? {
+            Scheme::H(hw) => match hw {
+                Hardware::Digital => match parsed_uri.path() {
+                    path if path.starts_with("gpio") => {
+                        if let Ok(int) = self.search_resource_array(&parsed_uri, self.input_pins) {
+                            Ok(ResourceID::InputGpio(int))
+                        } else {
+                            self.search_resource_array(&parsed_uri, self.output_pins)
+                                .map(|int| ResourceID::OutputGpio(int))
+                        }
                     }
-                }
+                    _ => unimplemented!(),
+                },
                 _ => unimplemented!(),
             },
-            _ => unimplemented!(),
-        };
-        Err(RuntimeError::ResourceNotFound)
+            Scheme::V(v) => match v {
+                Virtual::Event => self
+                    .search_virtual_resources(&parsed_uri)
+                    .map(|id| ResourceID::Virtual(id))
+                    .or({
+                        let id =
+                            NEXT_VIRTUAL_ID.fetch_add(1, core::sync::atomic::Ordering::Relaxed);
+                        let event = Box::new(GpioEvent::from_uri(uri)?);
+                        self.virtual_resources.insert(id, event);
+                        Ok(ResourceID::Virtual(id))
+                    }),
+                _ => unimplemented!(),
+            },
+        }
     }
     fn search_resource_array(
         &self,
         search_uri: &Uri,
         array: &'static [&'static mut dyn Resource],
     ) -> Result<u8, RuntimeError> {
-        use core::str::from_utf8_mut;
         let mut buf_array = [0u8; 255];
         let buffer: &mut str = from_utf8_mut(&mut buf_array).unwrap();
         for i in 0..array.len() {
-            //TODO:
-            // if array[i].to_uri(buffer) == search_uri {
-            //     return Ok(i as u8);
-            // }
+            if &array[i].to_uri(buffer) == search_uri {
+                return Ok(i as u8);
+            }
         }
-        unimplemented!()
+        Err(RuntimeError::ResourceNotFound)
     }
-    // fn add_resource(&mut self, resource: &'static mut dyn Resource) -> ResourceID {
-    //     let id = self.static_resources.len();
-    //     match self.static_resources.push(resource) {
-    //         Ok(()) => {}
-    //         Err(_resource) => panic!("filled resource queue"),
-    //     }
-    //     ResourceID(id as u8)
-    // }
-    pub fn run(&mut self) -> ! {
-        //TODO: enable interrupts here
-        trace!("run");
+    fn search_virtual_resources(&self, search_uri: &Uri) -> Result<u8, RuntimeError> {
+        let mut buf_array = [0u8; 255];
+        let buffer: &mut str = from_utf8_mut(&mut buf_array).unwrap();
+        self.virtual_resources
+            .iter()
+            .find_map(|(k, v)| {
+                if &v.to_uri(buffer) == search_uri {
+                    Some((k, v))
+                } else {
+                    None
+                }
+            })
+            .ok_or(RuntimeError::ResourceNotFound)
+            .map(|(k, _v)| *k)
+    }
+    pub fn run(&'static mut self) -> ! {
         loop {
             self.executor.run();
-            trace!("sleep");
             crate::device::sleep();
         }
     }
-    pub fn spawn_task(&mut self, task: Task) {
-        trace!("spawn");
+    pub fn spawn_task(&'static mut self, task: Task) {
         self.executor.spawn(task);
     }
-    // fn configure(&mut self, configurations: &[ComponentConfiguration]) {
-    //     for configuration in configurations {
-    //         let resource: &dyn Resource = match configuration {
-    //             ComponentConfiguration::Gpio(gpio) => gpio,
-    //             _ => unimplemented!(),
-    //         };
-    //         // TODO: maybe cloning is somehow possible
-    //         let resource = unsafe { &mut *(resource as *const dyn Resource as *mut dyn Resource) };
-    //         self.add_resource(resource);
-    //     }
-    // }
-    pub(crate) fn register_waker(&mut self, trigger: &Event, waker: &Waker) {
+    pub(crate) fn register_waker(&'static mut self, trigger: &Event, waker: &Waker) {
         self.executor.register_waker(trigger, waker)
     }
 }

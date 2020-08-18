@@ -1,4 +1,3 @@
-use super::ComponentConfiguration;
 use crate::Runtime;
 use core::task::{Context, Poll};
 use futures::StreamExt;
@@ -13,6 +12,7 @@ pub enum ResourceID {
     Channel(u8),
     Serial(u8),
     Timer(u8),
+    Virtual(u8),
 }
 
 #[non_exhaustive]
@@ -29,48 +29,43 @@ pub enum ResourceError {
     WriteError,
 }
 
-pub trait RegisterComponent {
-    fn register_component(self, configuration: ComponentConfiguration);
-}
-
-#[allow(unused)]
 pub trait Resource: Sync {
-    fn read_next(&mut self, context: &mut Context) -> Poll<Option<u8>> {
+    fn read_next(&mut self, _context: &mut Context) -> Poll<Option<u8>> {
         Poll::Ready(None)
     }
-    fn write_next(&mut self, context: &mut Context, byte: u8) -> Poll<Result<(), ResourceError>> {
+    fn write_next(&mut self, _context: &mut Context, _byte: u8) -> Poll<Result<(), ResourceError>> {
         Poll::Ready(Err(ResourceError::NonWritingResource))
     }
     fn seek(&mut self, context: &mut Context, pos: usize) -> Poll<Result<(), ResourceError>>;
+    fn to_uri<'uri>(&self, buffer: &'uri mut str) -> Uri<'uri>;
 }
 
-// #[allow(unused)]
-// impl ResourceID {
-//     pub fn read_stream(&mut self) -> impl StreamExt<Item = u8> {
-//         use futures::stream::poll_fn;
-//         let id = *self;
-//         poll_fn(move |cx| Runtime::get().get_resource_object(&id).read_next(cx))
-//     }
-//     pub async fn write(
-//         &mut self,
-//         mut stream: impl StreamExt<Item = u8> + Unpin,
-//     ) -> Result<(), ResourceError> {
-//         use futures::future::poll_fn;
+impl ResourceID {
+    pub fn read_stream(&mut self) -> impl StreamExt<Item = u8> {
+        use futures::stream::poll_fn;
+        let id = *self;
+        poll_fn(move |cx| Runtime::get().get_resource_object(&id).read_next(cx))
+    }
+    pub async fn write(
+        &mut self,
+        mut stream: impl StreamExt<Item = u8> + Unpin,
+    ) -> Result<(), ResourceError> {
+        use futures::future::poll_fn;
 
-//         let res = Runtime::get().get_resource_object(self);
-//         while let Some(byte) = stream.next().await {
-//             poll_fn(|cx| (res.write_next(cx, byte))).await?
-//         }
-//         Ok(())
-//     }
-//     pub async fn seek(&mut self, pos: usize) -> Result<(), ResourceError> {
-//         use futures::future::poll_fn;
-//         poll_fn(|cx| Runtime::get().get_resource_object(self).seek(cx, pos)).await
-//     }
-//     pub fn to_uri<'uri>(&self, buffer: &'uri mut str) -> Uri<'uri> {
-//         Runtime::get().get_resource_object(self).to_uri(buffer)
-//     }
-// }
+        let res = Runtime::get().get_resource_object(self);
+        while let Some(byte) = stream.next().await {
+            poll_fn(|cx| (res.write_next(cx, byte))).await?
+        }
+        Ok(())
+    }
+    pub async fn seek(&mut self, pos: usize) -> Result<(), ResourceError> {
+        use futures::future::poll_fn;
+        poll_fn(|cx| Runtime::get().get_resource_object(self).seek(cx, pos)).await
+    }
+    pub fn to_uri<'uri>(&self, buffer: &'uri mut str) -> Uri<'uri> {
+        Runtime::get().get_resource_object(self).to_uri(buffer)
+    }
+}
 
 impl From<core::num::ParseFloatError> for ResourceError {
     fn from(error: core::num::ParseFloatError) -> Self {

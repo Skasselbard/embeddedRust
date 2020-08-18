@@ -4,7 +4,7 @@ pub use self::gpio::*;
 use crate::generation::{self, DeviceGeneration, GpioGeneration, SysGeneration};
 use crate::types::{Direction, Frequency, Gpio, PinMode, TriggerEdge};
 use quote::format_ident;
-use syn::{parse_quote, parse_str, Ident, Stmt, Type};
+use syn::{parse_quote, parse_str, Stmt, Type};
 
 macro_rules! peripherals_ident {
     () => {
@@ -20,9 +20,8 @@ impl DeviceGeneration for Generator {
     fn generate_imports(&self) -> std::vec::Vec<syn::Stmt> {
         parse_quote!(
             use stm32f1xx_hal::gpio::{Edge, ExtiPin};
-            use stm32f1xx_hal::pac;
             use stm32f1xx_hal::prelude::*;
-            use embedded_rust::device::{InputPin, OutputPin};
+            use embedded_rust::device::{InputPin, OutputPin, Pin, Port, Channel};
             use embedded_rust::resources::{Resource};
             use embedded_rust::Runtime;
         )

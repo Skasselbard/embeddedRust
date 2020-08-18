@@ -32,13 +32,13 @@ pub fn device_config(attr: TokenStream, item: TokenStream) -> TokenStream {
                 unsafe{
                     Runtime::init(
                         #heap_size,
-                        SYS_ARRAY.as_ref().unwrap(),
-                        INPUT_ARRAY.as_ref().unwrap(),
-                        OUTPUT_ARRAY.as_ref().unwrap(),
-                        PWM_ARRAY.as_ref().unwrap(),
-                        CHANNEL_ARRAY.as_ref().unwrap(),
-                        SERIAL_ARRAY.as_ref().unwrap(),
-                        TIMER_ARRAY.as_ref().unwrap(),
+                        SYS_ARRAY.as_mut().unwrap(),
+                        INPUT_ARRAY.as_mut().unwrap(),
+                        OUTPUT_ARRAY.as_mut().unwrap(),
+                        PWM_ARRAY.as_mut().unwrap(),
+                        CHANNEL_ARRAY.as_mut().unwrap(),
+                        SERIAL_ARRAY.as_mut().unwrap(),
+                        TIMER_ARRAY.as_mut().unwrap(),
                     ).expect("Runtime initialization failed");
                 }
             }
@@ -46,7 +46,7 @@ pub fn device_config(attr: TokenStream, item: TokenStream) -> TokenStream {
             fn get_resource(
                 uri: &str
             ) -> Result<embedded_rust::resources::ResourceID, embedded_rust::RuntimeError>{
-                Err(embedded_rust::RuntimeError::ResourceNotFound)
+                embedded_rust::Runtime::get().get_resource(uri)
             }
             #[inline]
             fn run() -> !{
@@ -101,14 +101,6 @@ fn generate_component_statics(components: &Components) -> Vec<Stmt> {
 }
 
 fn generate_static_init(components: &Components) -> ExprUnsafe {
-    let sys_tys = &components.sys.ty;
-    let in_tys = &components.input_pins.ty;
-    let out_tys = &components.output_pins.ty;
-    let pwm_tys = &components.pwms.ty;
-    let channel_tys = &components.channels.ty;
-    let serial_tys = &components.serials.ty;
-    let timer_tys = &components.timers.ty;
-
     let sys_idents = &components.sys.identifiers;
     let in_idents = &components.input_pins.identifiers;
     let out_idents = &components.output_pins.identifiers;
@@ -125,19 +117,18 @@ fn generate_static_init(components: &Components) -> ExprUnsafe {
     let ser_index = (0..components.serials.identifiers.len()).map(syn::Index::from);
     let tim_index = (0..components.timers.identifiers.len()).map(syn::Index::from);
 
-    let sys_len = components.sys.identifiers.len();
-    let in_len = components.input_pins.identifiers.len();
-    let out_len = components.output_pins.identifiers.len();
-    let pwm_len = components.pwms.identifiers.len();
-    let chan_len = components.channels.identifiers.len();
-    let ser_len = components.serials.identifiers.len();
-    let tim_len = components.timers.identifiers.len();
+    let in_channels = &components.input_pins.channels;
+    let out_channels = &components.output_pins.channels;
+
+    let in_ports = &components.input_pins.ports;
+    let out_ports = &components.output_pins.ports;
 
     parse_quote!(
         unsafe{
+            //TODO: populate sys
            SYS = Some((#(#sys_idents,)*));
-           INPUT_PINS = Some((#(InputPin::new(#in_idents),)*));
-           OUTPUT_PINS = Some((#(OutputPin::new(#out_idents),)*));
+           INPUT_PINS = Some((#(InputPin::new(Pin::new(#in_channels , #in_ports), #in_idents),)*));
+           OUTPUT_PINS = Some((#(OutputPin::new(Pin::new(#out_channels, #out_ports), #out_idents),)*));
            PWM = Some((#(#pwm_idents,)*));
            CHANNELS = Some((#(#channel_idents,)*));
            SERIALS = Some((#(#serial_idents,)*));

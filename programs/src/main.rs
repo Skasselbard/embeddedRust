@@ -1,7 +1,11 @@
 #![no_main]
 #![no_std]
 
-use cortex_m_semihosting::hprintln;
+extern crate alloc;
+
+use alloc::boxed::Box;
+// use cortex_m_semihosting::hprintln;
+use futures::stream;
 use futures::StreamExt;
 
 use cortex_m_rt::entry;
@@ -15,9 +19,8 @@ use embedded_rust_macros::*;
                 "sys_clock": [36, "mhz"]
             },
             "gpios": [
-                ["PA0", "input", "pull_down", "rising"],
-                ["PA1", "output", "push_pull"],
-                ["PA2", "input", "pull_down", "falling"]
+                ["PA0", "input", "pull_up", "falling"],
+                ["PC13", "output", "push_pull"]
             ]
         }
     })
@@ -26,23 +29,18 @@ struct BluePill;
 #[entry]
 fn main() -> ! {
     BluePill::init();
-    Task::new(example_task()).spawn();
     Task::new(test_task()).spawn();
     BluePill::run();
 }
 
 pub async fn test_task() {
-    let mut gpio = BluePill::get_resource("event:gpio/pa0").unwrap();
-    while let Some(_event) = gpio.read_stream().next().await {
-        hprintln!("GPIOEVENT IN MAIN {}", _event);
+    let mut button_events = BluePill::get_resource("event:gpio/pa0").unwrap();
+    let mut led = BluePill::get_resource("digital:gpio/pc13").unwrap();
+    let mut led_light_state = false;
+    while let Some(_event) = button_events.read_stream().next().await {
+        led_light_state = !led_light_state;
+        led.write(Box::pin(stream::once(async { led_light_state as u8 })))
+            .await
+            .unwrap();
     }
-}
-
-pub async fn async_number() -> u32 {
-    42
-}
-
-pub async fn example_task() {
-    let number = async_number().await;
-    hprintln!("async number: {}", number);
 }

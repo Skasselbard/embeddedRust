@@ -6,7 +6,14 @@ pub use gpio::*;
 pub use pwm::*;
 pub use usart::*;
 
-pub type DeviceInterrupt = stm32f1xx_hal::device::Interrupt;
+#[derive(Copy, Clone, PartialEq, Eq, Debug, Ord, PartialOrd)]
+pub enum ExtiEvent {
+    Gpio(super::Pin),
+    Pvd,
+    RtcAlarm,
+    UsbWakeup,
+    EthernetWakeup,
+}
 
 /// The heap starts after the data segments of static values (.data and .bss)
 /// #[link_section] places the annotated static directly at the given data segment.

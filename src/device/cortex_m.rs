@@ -12,7 +12,7 @@ fn alloc_error_handler(layout: alloc::alloc::Layout) -> ! {
 #[panic_handler]
 fn panic(info: &PanicInfo) -> ! {
     // log::error!("panic: {}", info);
-    cortex_m_semihosting::hprintln!("panic: {}", info);
+    cortex_m_semihosting::hprintln!("panic: {}", info).unwrap();
     cortex_m::interrupt::disable();
     loop {}
 }
@@ -25,7 +25,7 @@ fn HardFault(ef: &cortex_m_rt::ExceptionFrame) -> ! {
 
 #[exception]
 fn DefaultHandler(irqn: i16) {
-    cortex_m_semihosting::hprintln!("IRQn = {}", irqn);
+    cortex_m_semihosting::hprintln!("IRQn = {}", irqn).unwrap();
 }
 
 /// Creates a new heap with the given bottom and size. The bottom address must be

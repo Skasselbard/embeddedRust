@@ -10,6 +10,7 @@ mod logging;
 pub mod device;
 
 pub mod events;
+pub mod io;
 pub mod resources;
 pub mod schemes;
 
@@ -27,7 +28,6 @@ use core::{
 };
 use device::GpioEvent;
 use events::Event;
-use log::trace;
 use nom_uri::Uri;
 use resources::{Resource, ResourceID};
 use schemes::{Hardware, Scheme, Virtual};
@@ -94,7 +94,7 @@ impl Runtime {
     pub fn get() -> &'static mut Runtime {
         Self::get_inner().as_mut().expect("uninitialized runtime")
     }
-    fn get_resource_object(&'static mut self, id: &ResourceID) -> &'static mut dyn Resource {
+    fn get_resource_object(&'static mut self, id: &ResourceID) -> &mut dyn Resource {
         match id {
             ResourceID::Sys(index) => *self.sys.get_mut(*index as usize).unwrap(),
             ResourceID::InputGpio(index) => *self.input_pins.get_mut(*index as usize).unwrap(),

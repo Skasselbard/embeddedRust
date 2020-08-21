@@ -1,7 +1,8 @@
+use crate::io::{self, AsyncRead, AsyncSeek, AsyncWrite};
 use crate::Runtime;
+use core::pin::Pin;
 use core::task::{Context, Poll};
-use futures::StreamExt;
-use nom_uri::Uri;
+use nom_uri::{ToUri, Uri};
 
 #[derive(Copy, Clone, PartialEq, Eq, Debug, Hash)]
 pub enum ResourceID {
@@ -29,40 +30,63 @@ pub enum ResourceError {
     WriteError,
 }
 
-pub trait Resource: Sync {
-    fn read_next(&mut self, _context: &mut Context) -> Poll<Option<u8>> {
-        Poll::Ready(None)
-    }
-    fn write_next(&mut self, _context: &mut Context, _byte: u8) -> Poll<Result<(), ResourceError>> {
-        Poll::Ready(Err(ResourceError::NonWritingResource))
-    }
-    fn seek(&mut self, context: &mut Context, pos: usize) -> Poll<Result<(), ResourceError>>;
-    fn to_uri<'uri>(&self, buffer: &'uri mut str) -> Uri<'uri>;
+/// Inspired by the async io traits of the futures trait
+pub trait Resource: Sync + ToUri {
+    fn poll_read(&mut self, cx: &mut Context<'_>, buf: &mut [u8])
+        -> Poll<Result<usize, io::Error>>;
+    fn poll_write(&mut self, cx: &mut Context<'_>, buf: &[u8]) -> Poll<Result<usize, io::Error>>;
+    fn poll_flush(&mut self, cx: &mut Context<'_>) -> Poll<Result<(), io::Error>>;
+    fn poll_close(&mut self, cx: &mut Context<'_>) -> Poll<Result<(), io::Error>>;
+    fn poll_seek(
+        &mut self,
+        cx: &mut Context<'_>,
+        pos: io::SeekFrom,
+    ) -> Poll<Result<u64, io::Error>>;
 }
 
-impl ResourceID {
-    pub fn read_stream(&mut self) -> impl StreamExt<Item = u8> {
-        use futures::stream::poll_fn;
-        let id = *self;
-        poll_fn(move |cx| Runtime::get().get_resource_object(&id).read_next(cx))
+// impl Resource for ResourceID {}
+impl Unpin for ResourceID {}
+impl AsyncRead for ResourceID {
+    fn poll_read(
+        self: Pin<&mut ResourceID>,
+        cx: &mut Context<'_>,
+        buf: &mut [u8],
+    ) -> Poll<Result<usize, io::Error>> {
+        Runtime::get()
+            .get_resource_object(&*self)
+            .poll_read(cx, buf)
     }
-    pub async fn write(
-        &mut self,
-        mut stream: impl StreamExt<Item = u8> + Unpin,
-    ) -> Result<(), ResourceError> {
-        use futures::future::poll_fn;
-
-        let res = Runtime::get().get_resource_object(self);
-        while let Some(byte) = stream.next().await {
-            poll_fn(|cx| (res.write_next(cx, byte))).await?
-        }
-        Ok(())
+}
+impl AsyncWrite for ResourceID {
+    fn poll_write(
+        self: Pin<&mut ResourceID>,
+        cx: &mut Context<'_>,
+        buf: &[u8],
+    ) -> Poll<Result<usize, io::Error>> {
+        Runtime::get()
+            .get_resource_object(&*self)
+            .poll_write(cx, buf)
     }
-    pub async fn seek(&mut self, pos: usize) -> Result<(), ResourceError> {
-        use futures::future::poll_fn;
-        poll_fn(|cx| Runtime::get().get_resource_object(self).seek(cx, pos)).await
+    fn poll_flush(self: Pin<&mut ResourceID>, cx: &mut Context<'_>) -> Poll<Result<(), io::Error>> {
+        Runtime::get().get_resource_object(&*self).poll_flush(cx)
     }
-    pub fn to_uri<'uri>(&self, buffer: &'uri mut str) -> Uri<'uri> {
+    fn poll_close(self: Pin<&mut ResourceID>, cx: &mut Context<'_>) -> Poll<Result<(), io::Error>> {
+        Runtime::get().get_resource_object(&*self).poll_close(cx)
+    }
+}
+impl AsyncSeek for ResourceID {
+    fn poll_seek(
+        self: Pin<&mut Self>,
+        cx: &mut Context<'_>,
+        pos: io::SeekFrom,
+    ) -> Poll<Result<u64, io::Error>> {
+        Runtime::get()
+            .get_resource_object(&*self)
+            .poll_seek(cx, pos)
+    }
+}
+impl ToUri for ResourceID {
+    fn to_uri<'uri>(&self, buffer: &'uri mut str) -> Uri<'uri> {
         Runtime::get().get_resource_object(self).to_uri(buffer)
     }
 }

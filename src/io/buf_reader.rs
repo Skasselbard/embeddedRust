@@ -1,0 +1,209 @@
+use super::DEFAULT_BUF_SIZE;
+use super::{AsyncBufRead, AsyncRead, AsyncSeek, AsyncWrite, Result, SeekFrom};
+use alloc::boxed::Box;
+use alloc::vec::Vec;
+use core::pin::Pin;
+use core::task::{Context, Poll};
+use core::{cmp, fmt};
+use pin_project::pin_project;
+
+/// The `BufReader` struct adds buffering to any reader.
+///
+/// It can be excessively inefficient to work directly with a [`AsyncRead`]
+/// instance. A `BufReader` performs large, infrequent reads on the underlying
+/// [`AsyncRead`] and maintains an in-memory buffer of the results.
+///
+/// `BufReader` can improve the speed of programs that make *small* and
+/// *repeated* read calls to the same file or network socket. It does not
+/// help when reading very large amounts at once, or reading just one or a few
+/// times. It also provides no advantage when reading from a source that is
+/// already in memory, like a `Vec<u8>`.
+///
+/// When the `BufReader` is dropped, the contents of its buffer will be
+/// discarded. Creating multiple instances of a `BufReader` on the same
+/// stream can cause data loss.
+///
+/// [`AsyncRead`]: futures_io::AsyncRead
+///
+// TODO: Examples
+#[pin_project]
+pub struct BufReader<R> {
+    #[pin]
+    inner: R,
+    buffer: Box<[u8]>,
+    pos: usize,
+    cap: usize,
+}
+
+impl<R: AsyncRead> BufReader<R> {
+    /// Creates a new `BufReader` with a default buffer capacity. The default is currently 8 KB,
+    /// but may change in the future.
+    pub fn new(inner: R) -> Self {
+        Self::with_capacity(DEFAULT_BUF_SIZE, inner)
+    }
+
+    /// Creates a new `BufReader` with the specified buffer capacity.
+    pub fn with_capacity(capacity: usize, inner: R) -> Self {
+        unsafe {
+            let mut buffer = Vec::with_capacity(capacity);
+            buffer.set_len(capacity);
+            Self {
+                inner,
+                buffer: buffer.into_boxed_slice(),
+                pos: 0,
+                cap: 0,
+            }
+        }
+    }
+
+    delegate_access_inner!(inner, R, ());
+
+    /// Returns a reference to the internally buffered data.
+    ///
+    /// Unlike `fill_buf`, this will not attempt to fill the buffer if it is empty.
+    pub fn buffer(&self) -> &[u8] {
+        &self.buffer[self.pos..self.cap]
+    }
+
+    /// Invalidates all data in the internal buffer.
+    #[inline]
+    fn discard_buffer(self: Pin<&mut Self>) {
+        let this = self.project();
+        *this.pos = 0;
+        *this.cap = 0;
+    }
+}
+
+impl<R: AsyncRead> AsyncRead for BufReader<R> {
+    fn poll_read(
+        mut self: Pin<&mut Self>,
+        cx: &mut Context<'_>,
+        buf: &mut [u8],
+    ) -> Poll<Result<usize>> {
+        // If we don't have any buffered data and we're doing a massive read
+        // (larger than our internal buffer), bypass our internal buffer
+        // entirely.
+        if self.pos == self.cap && buf.len() >= self.buffer.len() {
+            let res = ready!(self.as_mut().project().inner.poll_read(cx, buf));
+            self.discard_buffer();
+            return Poll::Ready(res);
+        }
+        let rem = ready!(self.as_mut().poll_fill_buf(cx))?;
+
+        // from std read
+        // https://doc.rust-lang.org/nightly/src/std/io/impls.rs.html#231-300
+        let amt = cmp::min(buf.len(), rem.len());
+        let (a, _b) = rem.split_at(amt);
+        // First check if the amount of bytes we want to read is small:
+        // `copy_from_slice` will generally expand to a call to `memcpy`, and
+        // for a single byte the overhead is significant.
+        if amt == 1 {
+            buf[0] = a[0];
+        } else {
+            buf[..amt].copy_from_slice(a);
+        }
+
+        // rem = _b;
+        let nread = amt;
+        self.consume(nread);
+        Poll::Ready(Ok(nread))
+    }
+}
+
+impl<R: AsyncRead> AsyncBufRead for BufReader<R> {
+    fn poll_fill_buf(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Result<&[u8]>> {
+        let this = self.project();
+
+        // If we've reached the end of our internal buffer then we need to fetch
+        // some more data from the underlying reader.
+        // Branch using `>=` instead of the more correct `==`
+        // to tell the compiler that the pos..cap slice is always valid.
+        if *this.pos >= *this.cap {
+            debug_assert!(*this.pos == *this.cap);
+            *this.cap = ready!(this.inner.poll_read(cx, this.buffer))?;
+            *this.pos = 0;
+        }
+        Poll::Ready(Ok(&this.buffer[*this.pos..*this.cap]))
+    }
+
+    fn consume(self: Pin<&mut Self>, amt: usize) {
+        *self.project().pos = cmp::min(self.pos + amt, self.cap);
+    }
+}
+
+impl<R: AsyncWrite> AsyncWrite for BufReader<R> {
+    delegate_async_write!(inner);
+}
+
+impl<R: fmt::Debug> fmt::Debug for BufReader<R> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("BufReader")
+            .field("reader", &self.inner)
+            .field(
+                "buffer",
+                &format_args!("{}/{}", self.cap - self.pos, self.buffer.len()),
+            )
+            .finish()
+    }
+}
+
+impl<R: AsyncRead + AsyncSeek> AsyncSeek for BufReader<R> {
+    /// Seek to an offset, in bytes, in the underlying reader.
+    ///
+    /// The position used for seeking with `SeekFrom::Current(_)` is the
+    /// position the underlying reader would be at if the `BufReader` had no
+    /// internal buffer.
+    ///
+    /// Seeking always discards the internal buffer, even if the seek position
+    /// would otherwise fall within it. This guarantees that calling
+    /// `.into_inner()` immediately after a seek yields the underlying reader
+    /// at the same position.
+    ///
+    /// See [`AsyncSeek`](futures_io::AsyncSeek) for more details.
+    ///
+    /// Note: In the edge case where you're seeking with `SeekFrom::Current(n)`
+    /// where `n` minus the internal buffer length overflows an `i64`, two
+    /// seeks will be performed instead of one. If the second seek returns
+    /// `Err`, the underlying reader will be left at the same position it would
+    /// have if you called `seek` with `SeekFrom::Current(0)`.
+    fn poll_seek(
+        mut self: Pin<&mut Self>,
+        cx: &mut Context<'_>,
+        pos: SeekFrom,
+    ) -> Poll<Result<u64>> {
+        let result: u64;
+        if let SeekFrom::Current(n) = pos {
+            let remainder = (self.cap - self.pos) as i64;
+            // it should be safe to assume that remainder fits within an i64 as the alternative
+            // means we managed to allocate 8 exbibytes and that's absurd.
+            // But it's not out of the realm of possibility for some weird underlying reader to
+            // support seeking by i64::min_value() so we need to handle underflow when subtracting
+            // remainder.
+            if let Some(offset) = n.checked_sub(remainder) {
+                result = ready!(self
+                    .as_mut()
+                    .project()
+                    .inner
+                    .poll_seek(cx, SeekFrom::Current(offset)))?;
+            } else {
+                // seek backwards by our remainder, and then by the offset
+                ready!(self
+                    .as_mut()
+                    .project()
+                    .inner
+                    .poll_seek(cx, SeekFrom::Current(-remainder)))?;
+                self.as_mut().discard_buffer();
+                result = ready!(self
+                    .as_mut()
+                    .project()
+                    .inner
+                    .poll_seek(cx, SeekFrom::Current(n)))?;
+            }
+        } else {
+            // Seeking with Start/End doesn't care about our buffer length.
+            result = ready!(self.as_mut().project().inner.poll_seek(cx, pos))?;
+        }
+        self.discard_buffer();
+        Poll::Ready(Ok(result))
+    }
+}

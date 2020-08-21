@@ -7,14 +7,15 @@ pub(crate) use self::cortex_m::init_heap;
 #[cfg(feature = "stm32f1xx")]
 use stm32f1xx as dev;
 
-use crate::resources::ResourceError;
+use crate::alloc::string::ToString;
+use crate::io::{self, SeekFrom};
 use crate::resources::StrWriter;
 use crate::{Resource, ResourceID, RuntimeError};
 use core::cmp::Ordering;
 use core::fmt::Write;
 use core::task::{Context, Poll};
 use embedded_hal::digital::v2;
-use nom_uri::Uri;
+use nom_uri::{ToUri, Uri};
 
 pub type ExtiEvent = dev::ExtiEvent;
 pub type Channel = dev::Channel;
@@ -78,11 +79,9 @@ impl Pin {
 
 pub struct Heap {
     size: usize,
-    index: u8,
 }
 pub struct SysClock {
     clock: usize,
-    index: u8,
 }
 pub struct InputPin<HalPin: 'static> {
     id: Pin,
@@ -94,18 +93,36 @@ pub struct OutputPin<HalPin: 'static> {
 }
 
 impl Resource for Heap {
-    fn read_next(&mut self, _: &mut Context) -> Poll<Option<u8>> {
-        let byte = self.size.to_be_bytes()[self.index as usize];
-        self.index = (self.index + 1) % core::mem::size_of::<usize>() as u8;
-        Poll::Ready(Some(byte))
-    }
-    fn seek(
+    fn poll_read(
         &mut self,
-        _: &mut core::task::Context<'_>,
-        _: usize,
-    ) -> core::task::Poll<core::result::Result<(), ResourceError>> {
+        _context: &mut Context,
+        buf: &mut [u8],
+    ) -> Poll<Result<usize, io::Error>> {
+        let parsed = self.size.to_string();
+        let parsed = parsed.as_bytes();
+        if buf.len() < parsed.len() {
+            Poll::Ready(Err(io::Error::InvalidInput))
+        } else {
+            for i in 0..parsed.len() {
+                buf[i] = parsed[i]
+            }
+            Poll::Ready(Ok(parsed.len()))
+        }
+    }
+    fn poll_write(&mut self, _cx: &mut Context, _buf: &[u8]) -> Poll<Result<usize, io::Error>> {
+        Poll::Ready(Err(io::Error::AddrNotAvailable))
+    }
+    fn poll_flush(&mut self, _: &mut Context<'_>) -> Poll<Result<(), io::Error>> {
+        Poll::Ready(Err(io::Error::AddrNotAvailable))
+    }
+    fn poll_close(&mut self, _: &mut Context<'_>) -> Poll<Result<(), io::Error>> {
         Poll::Ready(Ok(()))
     }
+    fn poll_seek(&mut self, _cx: &mut Context, _pos: SeekFrom) -> Poll<Result<u64, io::Error>> {
+        Poll::Ready(Err(io::Error::AddrNotAvailable))
+    }
+}
+impl ToUri for Heap {
     fn to_uri<'uri>(&self, buffer: &'uri mut str) -> nom_uri::Uri<'uri> {
         let mut buffer = StrWriter::from(buffer);
         write!(buffer, "Sys:heap").unwrap();
@@ -114,22 +131,41 @@ impl Resource for Heap {
 }
 impl Heap {
     pub fn new(size: usize) -> Self {
-        Self { size, index: 0 }
+        Self { size }
     }
 }
+
 impl Resource for SysClock {
-    fn read_next(&mut self, _: &mut Context) -> Poll<Option<u8>> {
-        let byte = self.clock.to_be_bytes()[self.index as usize];
-        self.index = (self.index + 1) % core::mem::size_of::<usize>() as u8;
-        Poll::Ready(Some(byte))
-    }
-    fn seek(
+    fn poll_read(
         &mut self,
-        _: &mut core::task::Context<'_>,
-        _: usize,
-    ) -> core::task::Poll<core::result::Result<(), ResourceError>> {
+        _context: &mut Context,
+        buf: &mut [u8],
+    ) -> Poll<Result<usize, io::Error>> {
+        let parsed = self.clock.to_string();
+        let parsed = parsed.as_bytes();
+        if buf.len() < parsed.len() {
+            Poll::Ready(Err(io::Error::InvalidInput))
+        } else {
+            for i in 0..parsed.len() {
+                buf[i] = parsed[i]
+            }
+            Poll::Ready(Ok(parsed.len()))
+        }
+    }
+    fn poll_write(&mut self, _cx: &mut Context, _buf: &[u8]) -> Poll<Result<usize, io::Error>> {
+        Poll::Ready(Err(io::Error::AddrNotAvailable))
+    }
+    fn poll_flush(&mut self, _: &mut Context<'_>) -> Poll<Result<(), io::Error>> {
+        Poll::Ready(Err(io::Error::AddrNotAvailable))
+    }
+    fn poll_close(&mut self, _: &mut Context<'_>) -> Poll<Result<(), io::Error>> {
         Poll::Ready(Ok(()))
     }
+    fn poll_seek(&mut self, _cx: &mut Context, _pos: SeekFrom) -> Poll<Result<u64, io::Error>> {
+        Poll::Ready(Err(io::Error::AddrNotAvailable))
+    }
+}
+impl ToUri for SysClock {
     fn to_uri<'uri>(&self, buffer: &'uri mut str) -> nom_uri::Uri<'uri> {
         let mut buffer = StrWriter::from(buffer);
         write!(buffer, "Sys:clock").unwrap();
@@ -140,24 +176,7 @@ impl SysClock {
     pub fn new(clock_in_hertz: usize) -> Self {
         Self {
             clock: clock_in_hertz,
-            index: 0,
         }
-    }
-}
-
-// Dummy Resource. Can be used as a placeholder.
-impl Resource for () {
-    fn seek(
-        &mut self,
-        _: &mut core::task::Context<'_>,
-        _: usize,
-    ) -> core::task::Poll<core::result::Result<(), ResourceError>> {
-        Poll::Ready(Ok(()))
-    }
-    fn to_uri<'uri>(&self, buffer: &'uri mut str) -> nom_uri::Uri<'uri> {
-        let mut buffer = StrWriter::from(buffer);
-        write!(buffer, "Sys:error").unwrap();
-        Uri::parse(buffer.buffer().unwrap()).unwrap()
     }
 }
 
@@ -166,22 +185,47 @@ where
     HalPin: v2::InputPin<Error = Error> + Sync,
     Error: core::fmt::Display,
 {
-    fn read_next(&mut self, _: &mut Context) -> Poll<Option<u8>> {
+    fn poll_read(
+        &mut self,
+        _context: &mut Context,
+        buf: &mut [u8],
+    ) -> Poll<Result<usize, io::Error>> {
         match self.resource.is_high() {
-            Ok(res) => Poll::Ready(Some(res as u8)),
+            Ok(res) => {
+                let res = res.to_string();
+                let res = res.as_bytes();
+                if buf.len() < res.len() {
+                    return Poll::Ready(Err(io::Error::InvalidInput));
+                }
+                for i in 0..res.len() {
+                    buf[i] = res[i]
+                }
+                Poll::Ready(Ok(res.len()))
+            }
             Err(e) => {
                 log::error!("{}", e);
-                Poll::Ready(None)
+                Poll::Ready(Err(io::Error::Other))
             }
         }
     }
-    fn seek(
-        &mut self,
-        _: &mut core::task::Context<'_>,
-        _: usize,
-    ) -> core::task::Poll<core::result::Result<(), ResourceError>> {
+    fn poll_write(&mut self, _cx: &mut Context, _buf: &[u8]) -> Poll<Result<usize, io::Error>> {
+        Poll::Ready(Err(io::Error::AddrNotAvailable))
+    }
+    fn poll_flush(&mut self, _: &mut Context<'_>) -> Poll<Result<(), io::Error>> {
+        Poll::Ready(Err(io::Error::AddrNotAvailable))
+    }
+    fn poll_close(&mut self, _: &mut Context<'_>) -> Poll<Result<(), io::Error>> {
         Poll::Ready(Ok(()))
     }
+    fn poll_seek(&mut self, _cx: &mut Context, _pos: SeekFrom) -> Poll<Result<u64, io::Error>> {
+        Poll::Ready(Err(io::Error::AddrNotAvailable))
+    }
+}
+impl<HalPin, Error> ToUri for InputPin<HalPin>
+where
+    HalPin: v2::InputPin<Error = Error> + Sync,
+    Error: core::fmt::Display,
+{
     fn to_uri<'uri>(&self, buffer: &'uri mut str) -> nom_uri::Uri<'uri> {
         let mut buffer = StrWriter::from(buffer);
         write!(
@@ -212,23 +256,42 @@ where
     HalPin: v2::OutputPin<Error = Error> + Sync,
     Error: core::fmt::Display,
 {
-    fn write_next(&mut self, _context: &mut Context, byte: u8) -> Poll<Result<(), ResourceError>> {
-        let res = match byte != 0 {
-            true => self.resource.set_high(),
-            false => self.resource.set_low(),
-        };
-        if let Err(e) = &res {
-            log::error!("{}", e);
-        }
-        Poll::Ready(res.map_err(|_| ResourceError::WriteError))
-    }
-    fn seek(
+    fn poll_read(
         &mut self,
-        _: &mut core::task::Context<'_>,
-        _: usize,
-    ) -> core::task::Poll<core::result::Result<(), ResourceError>> {
+        _context: &mut Context,
+        _buf: &mut [u8],
+    ) -> Poll<Result<usize, io::Error>> {
+        Poll::Ready(Err(io::Error::AddrNotAvailable))
+    }
+    fn poll_write(&mut self, _cx: &mut Context, buf: &[u8]) -> Poll<Result<usize, io::Error>> {
+        // let resource = self.resource;
+        for byte in buf {
+            let res = match *byte != 0 {
+                true => self.resource.set_high(),
+                false => self.resource.set_low(),
+            };
+            if let Err(e) = &res {
+                log::error!("{}", e);
+                return Poll::Ready(Err(io::Error::Other));
+            }
+        }
+        Poll::Ready(Ok(buf.len()))
+    }
+    fn poll_flush(&mut self, _: &mut Context<'_>) -> Poll<Result<(), io::Error>> {
         Poll::Ready(Ok(()))
     }
+    fn poll_close(&mut self, _: &mut Context<'_>) -> Poll<Result<(), io::Error>> {
+        Poll::Ready(Ok(()))
+    }
+    fn poll_seek(&mut self, _cx: &mut Context, _pos: SeekFrom) -> Poll<Result<u64, io::Error>> {
+        Poll::Ready(Err(io::Error::AddrNotAvailable))
+    }
+}
+impl<HalPin, Error> ToUri for OutputPin<HalPin>
+where
+    HalPin: v2::OutputPin<Error = Error> + Sync,
+    Error: core::fmt::Display,
+{
     fn to_uri<'uri>(&self, buffer: &'uri mut str) -> nom_uri::Uri<'uri> {
         let mut buffer = StrWriter::from(buffer);
         write!(

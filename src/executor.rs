@@ -6,7 +6,6 @@ use core::sync::atomic::AtomicUsize;
 use core::task::{RawWaker, RawWakerVTable, Waker};
 use heapless::consts::*;
 use heapless::spsc::{Queue, SingleCore};
-use log::trace;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 struct TaskID(usize);

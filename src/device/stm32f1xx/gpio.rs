@@ -1,24 +1,16 @@
-use crate::device::{Pin, TriggerEdge};
+use crate::device::{ExtiEvent, Pin};
 use crate::events::{self, Event};
+use crate::io::{self, SeekFrom};
+use crate::resources::Resource;
 use crate::resources::StrWriter;
-use crate::resources::{Resource, ResourceError};
 use crate::schemes::{Scheme, Virtual};
 use crate::{Runtime, RuntimeError};
 use core::fmt::Write;
 use core::str::FromStr;
 use core::task::{Context, Poll};
-use nom_uri::Uri;
+use nom_uri::{ToUri, Uri};
 use stm32f1xx_hal::device::interrupt;
 use stm32f1xx_hal::gpio::{gpioa, gpiob, gpioc, ExtiPin, Floating, Input};
-
-#[derive(Copy, Clone, PartialEq, Eq, Debug, Ord, PartialOrd)]
-pub enum ExtiEvent {
-    Gpio(Pin),
-    Pvd,
-    RtcAlarm,
-    UsbWakeup,
-    EthernetWakeup,
-}
 
 macro_rules! check_interrupt {
     ($pinty:ty, $channel:expr, $port:expr) => {
@@ -136,10 +128,15 @@ fn pin_from_uri(uri: &str) -> Result<Pin, RuntimeError> {
 }
 
 impl Resource for GpioEvent {
-    fn read_next(&mut self, context: &mut Context) -> Poll<Option<u8>> {
+    fn poll_read(
+        &mut self,
+        context: &mut Context,
+        buf: &mut [u8],
+    ) -> Poll<Result<usize, io::Error>> {
         if self.event {
             self.event = false;
-            Poll::Ready(Some(0 as u8))
+            buf[0] = 0 as u8;
+            Poll::Ready(Ok(1))
         } else {
             Runtime::get().register_waker(
                 &Event::ExternalInterrupt(ExtiEvent::Gpio(self.id)),
@@ -149,9 +146,20 @@ impl Resource for GpioEvent {
             Poll::Pending
         }
     }
-    fn seek(&mut self, _: &mut Context, _: usize) -> Poll<Result<(), ResourceError>> {
+    fn poll_write(&mut self, _cx: &mut Context, _buf: &[u8]) -> Poll<Result<usize, io::Error>> {
+        Poll::Ready(Err(io::Error::AddrNotAvailable))
+    }
+    fn poll_flush(&mut self, _: &mut Context<'_>) -> Poll<Result<(), io::Error>> {
+        Poll::Ready(Err(io::Error::AddrNotAvailable))
+    }
+    fn poll_close(&mut self, _: &mut Context<'_>) -> Poll<Result<(), io::Error>> {
         Poll::Ready(Ok(()))
     }
+    fn poll_seek(&mut self, _cx: &mut Context, _pos: SeekFrom) -> Poll<Result<u64, io::Error>> {
+        Poll::Ready(Err(io::Error::AddrNotAvailable))
+    }
+}
+impl ToUri for GpioEvent {
     fn to_uri<'uri>(&self, buffer: &'uri mut str) -> nom_uri::Uri<'uri> {
         let mut buffer = StrWriter::from(buffer);
         write!(

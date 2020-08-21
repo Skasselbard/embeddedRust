@@ -3,12 +3,10 @@
 
 extern crate alloc;
 
-use alloc::boxed::Box;
 // use cortex_m_semihosting::hprintln;
-use futures::stream;
-use futures::StreamExt;
 
 use cortex_m_rt::entry;
+use embedded_rust::io::{AsyncReadExt, AsyncWriteExt};
 use embedded_rust::Task;
 use embedded_rust_macros::*;
 #[
@@ -37,10 +35,9 @@ pub async fn test_task() {
     let mut button_events = BluePill::get_resource("event:gpio/pa0").unwrap();
     let mut led = BluePill::get_resource("digital:gpio/pc13").unwrap();
     let mut led_light_state = false;
-    while let Some(_event) = button_events.read_stream().next().await {
+    let mut buf = [0; 1];
+    while let Ok(_count) = button_events.read(&mut buf).await {
         led_light_state = !led_light_state;
-        led.write(Box::pin(stream::once(async { led_light_state as u8 })))
-            .await
-            .unwrap();
+        led.write(&[led_light_state as u8]).await.unwrap();
     }
 }

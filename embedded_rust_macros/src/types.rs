@@ -4,6 +4,7 @@ use crate::devices::{dummy, stm32f1xx};
 use crate::generation::Generator;
 use crate::types;
 use syn::Expr;
+use crate::Component;
 
 /// This is the struct that is parsed from the macro input.
 /// It is an enum where each variant determines the different boards.
@@ -65,11 +66,17 @@ impl Config {
 /// an additional trait), a direction (in/out), an interrupt trigger edge configuration
 /// and a mode. It is useful to structure the actual gpio type in a similar way (see
 /// dummy example).
-pub trait Gpio: crate::components::Component {
+pub trait Gpio: Component {
     fn pin(&self) -> &dyn Pin;
     fn direction(&self) -> &Direction;
     fn mode(&self) -> &PinMode;
     fn trigger_edge(&self) -> Option<TriggerEdge>;
+}
+
+pub trait PWMInterface{
+    fn pins(&self) -> Vec<&dyn Pin>;
+    fn frequency(&self) -> Frequency;
+    fn generate(&self) -> Vec<syn::Stmt>;
 }
 
 /// The trait that each device pin should implement. For a complex example impression
@@ -118,7 +125,7 @@ impl Sys {
     }
 }
 
-#[derive(Deserialize, Debug)]
+#[derive(Deserialize, Debug, Copy, Clone)]
 pub enum UnitHz {
     #[serde(alias = "hz", alias = "Hz")]
     Hz,

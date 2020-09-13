@@ -15,7 +15,7 @@ pub(crate) struct Components<'c> {
     pub sys: Sys,
     pub input_pins: InPins<'c>,
     pub output_pins: OutPins<'c>,
-    pub pwms: PWMs,
+    pub pwm_pins: PWMPins,
     pub channels: Channels,
     pub serials: Serials,
     pub timers: Timers,
@@ -32,7 +32,6 @@ pub(crate) struct InPins<'c> {
     pub channels: Vec<Expr>,
     pub ports: Vec<Expr>,
     pub ty: Vec<Type>,
-    pub error_ty: Type,
 }
 pub(crate) struct OutPins<'c> {
     pub identifiers: Vec<Ident>,
@@ -40,11 +39,12 @@ pub(crate) struct OutPins<'c> {
     pub channels: Vec<Expr>,
     pub ports: Vec<Expr>,
     pub ty: Vec<Type>,
-    pub error_ty: Type,
 }
-pub(crate) struct PWMs {
+pub(crate) struct PWMPins {
     pub identifiers: Vec<Ident>,
     pub parsed_data: (),
+    pub channels: Vec<Expr>,
+    pub ports: Vec<Expr>,
     pub ty: Vec<Type>,
 }
 pub(crate) struct Channels {
@@ -110,7 +110,6 @@ pub(crate) fn parse_components(config: &Config) -> Components {
             channels: in_channels,
             ports: in_ports,
             parsed_data: in_pins,
-            error_ty: code_gen.input_error(),
         },
         output_pins: OutPins {
             identifiers: out_pins.iter().map(|gpio| gpio.identifier()).collect(),
@@ -118,10 +117,11 @@ pub(crate) fn parse_components(config: &Config) -> Components {
             channels: out_channels,
             ports: out_ports,
             parsed_data: out_pins,
-            error_ty: code_gen.output_error(),
         },
-        pwms: PWMs {
+        pwm_pins: PWMPins {
             identifiers: vec![],
+            channels: vec![],
+            ports: vec![],
             parsed_data: (),
             ty: vec![],
         },

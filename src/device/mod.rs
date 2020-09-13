@@ -83,6 +83,7 @@ pub struct Heap {
 pub struct SysClock {
     clock: usize,
 }
+//TODO: add a name as alias in uri
 pub struct InputPin<HalPin: 'static> {
     id: Pin,
     resource: HalPin,
@@ -90,6 +91,10 @@ pub struct InputPin<HalPin: 'static> {
 pub struct OutputPin<HalPin: 'static> {
     id: Pin,
     resource: HalPin,
+}
+pub struct PWMPin<HalPWMPin: 'static> {
+    id: Pin,
+    resource: HalPWMPin,
 }
 
 impl Resource for Heap {
@@ -264,7 +269,6 @@ where
         Poll::Ready(Err(io::Error::AddrNotAvailable))
     }
     fn poll_write(&mut self, _cx: &mut Context, buf: &[u8]) -> Poll<Result<usize, io::Error>> {
-        // let resource = self.resource;
         for byte in buf {
             let res = match *byte != 0 {
                 true => self.resource.set_high(),
@@ -311,6 +315,58 @@ where
 {
     pub fn new(pin: Pin, hal_pin: HalPin) -> Self {
         OutputPin {
+            id: pin,
+            resource: hal_pin,
+        }
+    }
+}
+
+impl<HalPWMPin, Duty> Resource for PWMPin<HalPWMPin>
+where
+    HalPWMPin: embedded_hal::PwmPin<Duty = Duty> + Sync,
+{
+    fn poll_read(
+        &mut self,
+        _context: &mut Context,
+        _buf: &mut [u8],
+    ) -> Poll<Result<usize, io::Error>> {
+        unimplemented!()
+    }
+    fn poll_write(&mut self, _cx: &mut Context, buf: &[u8]) -> Poll<Result<usize, io::Error>> {
+        unimplemented!()
+    }
+    fn poll_flush(&mut self, _: &mut Context<'_>) -> Poll<Result<(), io::Error>> {
+        Poll::Ready(Ok(()))
+    }
+    fn poll_close(&mut self, _: &mut Context<'_>) -> Poll<Result<(), io::Error>> {
+        Poll::Ready(Ok(()))
+    }
+    fn poll_seek(&mut self, _cx: &mut Context, _pos: SeekFrom) -> Poll<Result<u64, io::Error>> {
+        Poll::Ready(Err(io::Error::AddrNotAvailable))
+    }
+}
+impl<HalPWMPin, Duty> ToUri for PWMPin<HalPWMPin>
+where
+    HalPWMPin: embedded_hal::PwmPin<Duty = Duty> + Sync,
+{
+    fn to_uri<'uri>(&self, buffer: &'uri mut str) -> nom_uri::Uri<'uri> {
+        let mut buffer = StrWriter::from(buffer);
+        write!(
+            buffer,
+            "analog:pwm/p{}{}",
+            self.id.channel(),
+            self.id.port()
+        )
+        .unwrap();
+        Uri::parse(buffer.buffer().unwrap()).unwrap()
+    }
+}
+impl<HalPWMPin, Duty> PWMPin<HalPWMPin>
+where
+    HalPWMPin: embedded_hal::PwmPin<Duty = Duty>,
+{
+    pub fn new(pin: Pin, hal_pin: HalPWMPin) -> Self {
+        PWMPin {
             id: pin,
             resource: hal_pin,
         }

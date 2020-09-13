@@ -65,7 +65,7 @@ fn generate_component_statics(components: &Components) -> Vec<Stmt> {
     let sys_tys = &components.sys.ty;
     let in_tys = &components.input_pins.ty;
     let out_tys = &components.output_pins.ty;
-    let pwm_tys = &components.pwms.ty;
+    let pwm_tys = &components.pwm_pins.ty;
     let chan_tys = &components.channels.ty;
     let ser_tys = &components.serials.ty;
     let tim_tys = &components.serials.ty;
@@ -73,7 +73,7 @@ fn generate_component_statics(components: &Components) -> Vec<Stmt> {
     let sys_len = components.sys.identifiers.len();
     let in_len = components.input_pins.identifiers.len();
     let out_len = components.output_pins.identifiers.len();
-    let pwm_len = components.pwms.identifiers.len();
+    let pwm_len = components.pwm_pins.identifiers.len();
     let chan_len = components.channels.identifiers.len();
     let ser_len = components.serials.identifiers.len();
     let tim_len = components.timers.identifiers.len();
@@ -83,7 +83,7 @@ fn generate_component_statics(components: &Components) -> Vec<Stmt> {
         static mut SYS: Option<(#(#sys_tys,)*)> = None;
         static mut INPUT_PINS: Option<(#(InputPin<#in_tys>,)*)> = None;
         static mut OUTPUT_PINS: Option<(#(OutputPin<#out_tys>,)*)> = None;
-        static mut PWM: Option<(#(#pwm_tys,)*)> = None;
+        static mut PWM_PINS: Option<(#(#pwm_tys,)*)> = None;
         static mut CHANNELS: Option<(#(#chan_tys,)*)> = None;
         static mut SERIALS: Option<(#(#ser_tys,)*)> = None;
         static mut TIMERS: Option<(#(#tim_tys,)*)> = None;
@@ -104,7 +104,7 @@ fn generate_static_init(components: &Components) -> ExprUnsafe {
     let sys_idents = &components.sys.identifiers;
     let in_idents = &components.input_pins.identifiers;
     let out_idents = &components.output_pins.identifiers;
-    let pwm_idents = &components.pwms.identifiers;
+    let pwm_idents = &components.pwm_pins.identifiers;
     let channel_idents = &components.channels.identifiers;
     let serial_idents = &components.serials.identifiers;
     let timer_idents = &components.timers.identifiers;
@@ -112,16 +112,19 @@ fn generate_static_init(components: &Components) -> ExprUnsafe {
     let sys_index = (0..components.sys.identifiers.len()).map(syn::Index::from);
     let in_index = (0..components.input_pins.identifiers.len()).map(syn::Index::from);
     let out_index = (0..components.output_pins.identifiers.len()).map(syn::Index::from);
-    let pwm_index = (0..components.pwms.identifiers.len()).map(syn::Index::from);
+    let pwm_index = (0..components.pwm_pins.identifiers.len()).map(syn::Index::from);
     let chan_index = (0..components.channels.identifiers.len()).map(syn::Index::from);
     let ser_index = (0..components.serials.identifiers.len()).map(syn::Index::from);
     let tim_index = (0..components.timers.identifiers.len()).map(syn::Index::from);
 
     let in_channels = &components.input_pins.channels;
-    let out_channels = &components.output_pins.channels;
-
     let in_ports = &components.input_pins.ports;
+
+    let out_channels = &components.output_pins.channels;
     let out_ports = &components.output_pins.ports;
+
+    let pwm_channels = &components.pwm_pins.channels;
+    let pwm_ports = &components.pwm_pins.ports;
 
     parse_quote!(
         unsafe{
@@ -129,7 +132,7 @@ fn generate_static_init(components: &Components) -> ExprUnsafe {
            SYS = Some((#(#sys_idents,)*));
            INPUT_PINS = Some((#(InputPin::new(Pin::new(#in_channels , #in_ports), #in_idents),)*));
            OUTPUT_PINS = Some((#(OutputPin::new(Pin::new(#out_channels, #out_ports), #out_idents),)*));
-           PWM = Some((#(#pwm_idents,)*));
+           PWM_PINS = Some((#(PWMPin::new(Pin::new(#pwm_channels, #pwm_ports), #pwm_idents),)*));
            CHANNELS = Some((#(#channel_idents,)*));
            SERIALS = Some((#(#serial_idents,)*));
            TIMERS = Some((#(#timer_idents,)*));
@@ -137,7 +140,7 @@ fn generate_static_init(components: &Components) -> ExprUnsafe {
             let sys = SYS.as_mut().unwrap();
             let input_pins = INPUT_PINS.as_mut().unwrap();
             let output_pins = OUTPUT_PINS.as_mut().unwrap();
-            let pwm = PWM.as_mut().unwrap();
+            let pwm = PWM_PINS.as_mut().unwrap();
             let channels = CHANNELS.as_mut().unwrap();
             let serials = SERIALS.as_mut().unwrap();
             let timers = TIMERS.as_mut().unwrap();

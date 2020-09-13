@@ -60,6 +60,9 @@ impl DeviceGeneration for DummyGenerator {
     fn generate_device_init(&self) -> std::vec::Vec<syn::Stmt> {
         vec![]
     }
+    fn generate_channels(&self, _: &std::vec::Vec<&dyn types::Gpio>) -> std::vec::Vec<syn::Stmt> {
+        vec![]
+    }
 }
 
 impl SysGeneration for DummyGenerator {
@@ -72,9 +75,6 @@ impl SysGeneration for DummyGenerator {
 }
 
 impl GpioGeneration for DummyGenerator {
-    fn generate_channels(&self, _: &std::vec::Vec<&dyn types::Gpio>) -> std::vec::Vec<syn::Stmt> {
-        vec![]
-    }
     fn generate_gpios(&self, gpios: &std::vec::Vec<&dyn types::Gpio>) -> std::vec::Vec<syn::Stmt> {
         let mut stmts = Vec::new();
         for gpio in gpios {
@@ -84,12 +84,6 @@ impl GpioGeneration for DummyGenerator {
             ));
         }
         stmts
-    }
-    fn input_error(&self) -> syn::Type {
-        syn::parse_str(&format!("()")).unwrap()
-    }
-    fn output_error(&self) -> syn::Type {
-        syn::parse_str(&format!("()")).unwrap()
     }
     fn interrupts(&self, _: &std::vec::Vec<&dyn types::Gpio>) -> std::vec::Vec<syn::Stmt> {
         //TODO:

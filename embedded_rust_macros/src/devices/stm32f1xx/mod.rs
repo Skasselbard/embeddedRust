@@ -1,15 +1,67 @@
+macro_rules! peripherals_ident {
+    () => {
+        format_ident!("peripherals")
+    };
+}
+
 pub mod gpio;
+mod pwm;
 
 pub use self::gpio::*;
 use crate::generation::{self, DeviceGeneration, GpioGeneration, SysGeneration};
 use crate::types::{Direction, Frequency, Gpio, PinMode, TriggerEdge};
 use quote::format_ident;
+use serde_derive::Deserialize;
 use syn::{parse_quote, parse_str, Stmt, Type};
 
-macro_rules! peripherals_ident {
-    () => {
-        format_ident!("peripherals")
-    };
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Deserialize)]
+pub enum Timer {
+    #[serde(alias = "tim1", alias = "TIM1")]
+    Tim1,
+    #[serde(alias = "tim2", alias = "TIM2")]
+    Tim2,
+    #[serde(alias = "tim3", alias = "TIM3")]
+    Tim3,
+    // #[serde(alias = "tim4", alias = "TIM4")]
+    // Tim4,
+    // #[serde(alias = "tim5", alias = "TIM5")]
+    // Tim5,
+    // #[serde(alias = "tim6", alias = "TIM6")]
+    // Tim6,
+    // #[serde(alias = "tim7", alias = "TIM7")]
+    // Tim7,
+    // #[serde(alias = "tim8", alias = "TIM8")]
+    // Tim8,
+    // #[serde(alias = "tim9", alias = "TIM9")]
+    // Tim9,
+    // #[serde(alias = "tim10", alias = "TIM10")]
+    // Tim10,
+    // #[serde(alias = "tim11", alias = "TIM11")]
+    // Tim11,
+    // #[serde(alias = "tim12", alias = "TIM12")]
+    // Tim12,
+    // #[serde(alias = "tim13", alias = "TIM13")]
+    // Tim13,
+    // #[serde(alias = "tim14", alias = "TIM14")]
+    // Tim14,
+}
+
+impl Timer{
+    pub fn name(&self) -> String{
+        match self {
+            Timer::Tim1 =>{"tim1".into()},
+            Timer::Tim2 =>{"tim2".into()},
+            Timer::Tim3 =>{"tim3".into()},
+        }
+    }
+    pub fn peripheral_bus(&self) -> String{
+        match self {
+            Timer::Tim1 =>{"apb2".into()},
+            Timer::Tim2 =>{"apb1".into()},
+            Timer::Tim3 =>{"apb1".into()},
+        }
+    }
 }
 
 pub struct Generator;
@@ -33,6 +85,9 @@ impl DeviceGeneration for Generator {
             let mut flash = #peripherals_ident.FLASH.constrain();
         )
     }
+    fn generate_channels(&self, gpios: &Vec<&dyn Gpio>) -> Vec<Stmt> {
+        channel_init_statements(gpios)
+    }
 }
 
 impl SysGeneration for Generator {
@@ -54,21 +109,12 @@ impl SysGeneration for Generator {
 }
 
 impl GpioGeneration for Generator {
-    fn generate_channels(&self, gpios: &Vec<&dyn Gpio>) -> Vec<Stmt> {
-        channel_init_statements(gpios)
-    }
     fn generate_gpios(&self, gpios: &Vec<&dyn Gpio>) -> Vec<Stmt> {
         let mut stmts = Vec::new();
         for gpio in gpios {
             stmts.append(&mut generate_gpio(*gpio));
         }
         stmts
-    }
-    fn input_error(&self) -> Type {
-        parse_str("core::convert::Infallible").unwrap()
-    }
-    fn output_error(&self) -> Type {
-        parse_str("core::convert::Infallible").unwrap()
     }
     fn interrupts(&self, gpios: &Vec<&dyn Gpio>) -> Vec<Stmt> {
         let mut stmts = Vec::new();
@@ -98,13 +144,6 @@ impl GpioGeneration for Generator {
     }
 }
 
-pub fn control_reg(pin: &dyn crate::types::Pin) -> String {
-    if (pin.port().parse::<usize>().unwrap() % 16) < 8 {
-        "crl".into()
-    } else {
-        "crh".into()
-    }
-}
 /// expand:
 /// ``stm32f1xx_hal::gpio::gpiox::PXY<MODE>``
 pub(crate) fn gpio_to_type(gpio: &dyn Gpio) -> Type {

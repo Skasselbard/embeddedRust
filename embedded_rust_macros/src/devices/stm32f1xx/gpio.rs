@@ -234,3 +234,11 @@ impl types::Pin for Pin {
         parse_str(&format!("Channel::{}", self.channel().to_uppercase())).unwrap()
     }
 }
+
+pub fn control_reg(pin: &dyn crate::types::Pin) -> String {
+    if (pin.port().parse::<usize>().unwrap() % 16) < 8 {
+        "crl".into()
+    } else {
+        "crh".into()
+    }
+}

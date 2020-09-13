@@ -34,10 +34,10 @@ fn main() -> ! {
 pub async fn test_task() {
     let mut button_events = BluePill::get_resource("event:gpio/pa0").unwrap();
     let mut led = BluePill::get_resource("digital:gpio/pc13").unwrap();
-    let mut led_light_state = false;
+    let mut led_state = false;
     let mut buf = [0; 1];
     while let Ok(_count) = button_events.read(&mut buf).await {
-        led_light_state = !led_light_state;
-        led.write(&[led_light_state as u8]).await.unwrap();
+        led_state = !led_state;
+        led.write(&[led_state as u8]).await.unwrap();
     }
 }

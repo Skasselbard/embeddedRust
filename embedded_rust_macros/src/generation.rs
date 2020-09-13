@@ -1,4 +1,4 @@
-use crate::{Frequency, Gpio};
+use crate::{Frequency, Gpio, PWMInterface};
 use syn::{Stmt, Type};
 
 /// The Generator trait is used to determine the proper generation functions
@@ -14,14 +14,14 @@ pub trait DeviceGeneration {
     /// For example the stm32f1xx boards need acces to a peripheral
     /// singleton and initialized flash.
     fn generate_device_init(&self) -> Vec<Stmt>;
-}
-pub trait GpioGeneration {
-    /// In the stm32f1 hal, each pin channel ('A' to 'E' in the pin types)
+    /// In the stm32f1 hal, each pin channel ('A' to 'E' in the pin types PAX to PEX)
     /// has to be initialized to initialize the actual pins
     /// this is done with these statements.
     /// A function to get the channel name is included in the Pin trait.
     /// A function to get the pin is included in the Gpio trait.
     fn generate_channels(&self, gpios: &Vec<&dyn Gpio>) -> Vec<Stmt>;
+}
+pub trait GpioGeneration {
     /// In this function all pins should be introduced with a let binding.
     /// The identifiers for the pins should be generatet with the identifier
     /// function of the Gpio trait (or rather its Component trait bound).
@@ -30,16 +30,19 @@ pub trait GpioGeneration {
     /// All other gpio dependent initializations (like gpio interrupts) should go
     /// here as well.
     fn generate_gpios(&self, gpios: &Vec<&dyn Gpio>) -> Vec<Stmt>;
-    /// The embedded_hal InputPin trait has an accociated Error type. This type
-    /// is device dependent and should be returned with this function.
-    fn input_error(&self) -> Type;
-    /// The embedded_hal OutputPin trait has an accociated Error type. This type
-    /// is device dependent and should be returned with this function.
-    fn output_error(&self) -> Type;
     /// This function should return all gpio interrupts that should be enabled.
     /// For the Stm32f1 boards this would be the apropriate Exti_X (External
     /// Interrupt) lines
     fn interrupts(&self, gpios: &Vec<&dyn Gpio>) -> Vec<Stmt>;
+}
+pub trait PWMGeneration {
+    fn generate_pwm_pins(&self, pwms: &Vec<&dyn PWMInterface>) -> Vec<Stmt>{
+        let mut stmts = vec![];
+        for pwm in pwms{
+            stmts.append(&mut pwm.generate());
+        }
+        stmts
+    }
 }
 pub trait SysGeneration {
     /// With this function statements for board speed are generated

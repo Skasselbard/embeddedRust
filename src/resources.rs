@@ -101,11 +101,6 @@ impl From<core::str::Utf8Error> for ResourceError {
         ResourceError::Utf8Error(error)
     }
 }
-impl<T> From<ResourceError> for nb::Result<T, ResourceError> {
-    fn from(error: ResourceError) -> Self {
-        Err(nb::Error::Other(error))
-    }
-}
 
 pub struct ByteWriter<'a> {
     buffer: &'a mut [u8],

@@ -2,9 +2,16 @@ use super::{Pin, Timer, Generator};
 use crate::types::{UnitHz, PWMInterface, Frequency};
 use serde_derive::Deserialize;
 use crate::generation::PWMGeneration;
-use syn::{Stmt, parse_quote};
+use syn::{Stmt, parse_quote, parse_str};
 use quote::format_ident;
 
+/// ```
+/// "pwm":[{
+///     "timer":    "Tim2", 
+///     "pins":     ["PA1"], 
+///     "frequency":[10,"khz"]
+/// }]
+/// ```
 #[derive(Debug, Clone, Deserialize)]
 pub struct PWM {
     timer: Timer,
@@ -12,9 +19,27 @@ pub struct PWM {
     frequency: (u32, UnitHz),
 }
 
+
+
 impl PWMInterface for PWM {
     fn pins(&self) -> Vec<&dyn crate::types::Pin> {
         self.pins.iter().map(|pin|pin as &dyn crate::types::Pin).collect()
+    }
+
+    fn tys(&self) -> Vec<syn::Type> {
+        self.pins.iter().map(|pin|{
+            let timer = match self.timer{
+                Timer::Tim1 => {"TIM1"},
+                Timer::Tim2 => {"TIM2"},
+                Timer::Tim3 => {"TIM3"},
+                Timer::Tim4 => {"TIM4"},
+            };
+            parse_str(&format!(
+                "PwmChannel<pac::{}, pwm::{}>",
+                timer,
+                self.timer.channel(pin)
+            )).unwrap()
+        }).collect()
     }
 
     fn frequency(&self) -> crate::types::Frequency {
@@ -37,7 +62,7 @@ impl PWMInterface for PWM {
             // expands to:
             // ``let pxy = gpiox.pxy.into_alternate_push_pull(&mut gpiox.crl);``
             stmts.append(&mut parse_quote!(
-                let #channel.#pin_name.into_alternate_push_pull(&mut #channel.#ctrl_reg);
+                let #pin_name = #channel.#pin_name.into_alternate_push_pull(&mut #channel.#ctrl_reg);
             ));
             pin_ids.push(pin_name);
         }
@@ -50,7 +75,7 @@ impl PWMInterface for PWM {
         // ```
         stmts.append(&mut parse_quote!(
             let timer = Timer::#timer(#peripherals.#timer_upper, &clocks, &mut rcc.#apb);
-            let (#(#pin_ids),*) = timer.pwm((#(#pin_ids),*), &mut afio.mapr, #frequency);
+            let (#(#pin_ids),*) = timer.pwm((#(#pin_ids),*), &mut afio.mapr, #frequency.hz()).split();
         ));
         stmts
     }

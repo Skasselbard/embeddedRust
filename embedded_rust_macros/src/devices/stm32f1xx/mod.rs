@@ -8,6 +8,7 @@ pub mod gpio;
 mod pwm;
 
 pub use self::gpio::*;
+pub use self::pwm::*;
 use crate::generation::{self, DeviceGeneration, GpioGeneration, SysGeneration};
 use crate::types::{Direction, Frequency, Gpio, PinMode, TriggerEdge};
 use quote::format_ident;
@@ -23,8 +24,8 @@ pub enum Timer {
     Tim2,
     #[serde(alias = "tim3", alias = "TIM3")]
     Tim3,
-    // #[serde(alias = "tim4", alias = "TIM4")]
-    // Tim4,
+    #[serde(alias = "tim4", alias = "TIM4")]
+    Tim4,
     // #[serde(alias = "tim5", alias = "TIM5")]
     // Tim5,
     // #[serde(alias = "tim6", alias = "TIM6")]
@@ -50,9 +51,10 @@ pub enum Timer {
 impl Timer{
     pub fn name(&self) -> String{
         match self {
-            Timer::Tim1 =>{"tim1".into()},
-            Timer::Tim2 =>{"tim2".into()},
-            Timer::Tim3 =>{"tim3".into()},
+            Timer::Tim1 => {"tim1".into()},
+            Timer::Tim2 => {"tim2".into()},
+            Timer::Tim3 => {"tim3".into()},
+            Timer::Tim4 => {"tim4".into()},
         }
     }
     pub fn peripheral_bus(&self) -> String{
@@ -60,7 +62,48 @@ impl Timer{
             Timer::Tim1 =>{"apb2".into()},
             Timer::Tim2 =>{"apb1".into()},
             Timer::Tim3 =>{"apb1".into()},
+            Timer::Tim4 =>{panic!("tim 4 does not map on peripheral bus")},
         }
+    }
+
+    pub fn channel(&self, pin: &Pin) -> String{
+        match (self, pin) {
+            (Timer::Tim1 ,Pin::PA08) => {"C1"}
+            (Timer::Tim1 ,Pin::PA09) => {"C2"}
+            (Timer::Tim1 ,Pin::PA10) => {"C3"}
+            (Timer::Tim1 ,Pin::PA11) => {"C4"}
+            (Timer::Tim1 ,Pin::PE09) => {"C1"}
+            (Timer::Tim1 ,Pin::PE11) => {"C2"}
+            (Timer::Tim1 ,Pin::PE13) => {"C3"}
+            (Timer::Tim1 ,Pin::PE14) => {"C4"}
+            (Timer::Tim2, Pin::PA00) => {"C1"}
+            (Timer::Tim2 ,Pin::PA01) => {"C2"}
+            (Timer::Tim2 ,Pin::PA02) => {"C3"}
+            (Timer::Tim2 ,Pin::PA03) => {"C4"}
+            (Timer::Tim2 ,Pin::PA15) => {"C1"}
+            (Timer::Tim2 ,Pin::PB03) => {"C2"}
+            (Timer::Tim2 ,Pin::PB10) => {"C3"}
+            (Timer::Tim2 ,Pin::PB11) => {"C4"}
+            (Timer::Tim3 ,Pin::PA06) => {"C1"}
+            (Timer::Tim3 ,Pin::PA07) => {"C2"}
+            (Timer::Tim3 ,Pin::PB00) => {"C3"}
+            (Timer::Tim3 ,Pin::PB01) => {"C4"}
+            (Timer::Tim3 ,Pin::PB04) => {"C1"}
+            (Timer::Tim3 ,Pin::PB05) => {"C2"}
+            (Timer::Tim3 ,Pin::PC06) => {"C1"}
+            (Timer::Tim3 ,Pin::PC07) => {"C2"}
+            (Timer::Tim3 ,Pin::PC08) => {"C3"}
+            (Timer::Tim3 ,Pin::PC09) => {"C4"}
+            (Timer::Tim4 ,Pin::PC06) => {"C1"}
+            (Timer::Tim4 ,Pin::PC07) => {"C2"}
+            (Timer::Tim4 ,Pin::PC08) => {"C3"}
+            (Timer::Tim4 ,Pin::PC09) => {"C4"}
+            (Timer::Tim4 ,Pin::PD12) => {"C1"}
+            (Timer::Tim4 ,Pin::PD13) => {"C2"}
+            (Timer::Tim4 ,Pin::PD14) => {"C3"}
+            (Timer::Tim4 ,Pin::PD15) => {"C4"}
+            _ => panic!("pin does not map on timer channel")
+        }.into()
     }
 }
 
@@ -71,9 +114,12 @@ impl generation::Generator for Generator {}
 impl DeviceGeneration for Generator {
     fn generate_imports(&self) -> std::vec::Vec<syn::Stmt> {
         parse_quote!(
-            use stm32f1xx_hal::gpio::{Edge, ExtiPin};
             use stm32f1xx_hal::prelude::*;
-            use embedded_rust::device::{InputPin, OutputPin, Pin, Port, Channel};
+            use stm32f1xx_hal::gpio::{self, Edge, ExtiPin};
+            use stm32f1xx_hal::timer::Timer;
+            use stm32f1xx_hal::pwm::{self, PwmChannel};
+            use stm32f1xx_hal::pac;
+            use embedded_rust::device::{InputPin, OutputPin, PWMPin, Pin, Port, Channel};
             use embedded_rust::resources::{Resource};
             use embedded_rust::Runtime;
         )
@@ -145,13 +191,13 @@ impl GpioGeneration for Generator {
 }
 
 /// expand:
-/// ``stm32f1xx_hal::gpio::gpiox::PXY<MODE>``
+/// ``gpio::gpiox::PXY<MODE>``
 pub(crate) fn gpio_to_type(gpio: &dyn Gpio) -> Type {
     let channel_name = format_ident!("{}", gpio.pin().channel_name());
     let pin_type = format_ident!("{}", gpio.pin().to_type());
     if let PinMode::Analog = gpio.mode() {
         parse_str(&format!(
-            "stm32f1xx_hal::gpio::{}::{}<stm32f1xx_hal::gpio::Analog>",
+            "gpio::{}::{}<gpio::Analog>",
             channel_name, pin_type
         ))
         .unwrap()
@@ -159,7 +205,7 @@ pub(crate) fn gpio_to_type(gpio: &dyn Gpio) -> Type {
         let direction = format_ident!("{}", gpio.direction().to_type_string());
         let mode = format_ident!("{}", gpio.mode().to_type_string());
         parse_str(&format!(
-            "stm32f1xx_hal::gpio::{}::{}<stm32f1xx_hal::gpio::{}<stm32f1xx_hal::gpio::{}>>",
+            "gpio::{}::{}<gpio::{}<gpio::{}>>",
             channel_name, pin_type, direction, mode
         ))
         .unwrap()

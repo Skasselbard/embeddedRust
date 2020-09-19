@@ -83,7 +83,7 @@ fn generate_component_statics(components: &Components) -> Vec<Stmt> {
         static mut SYS: Option<(#(#sys_tys,)*)> = None;
         static mut INPUT_PINS: Option<(#(InputPin<#in_tys>,)*)> = None;
         static mut OUTPUT_PINS: Option<(#(OutputPin<#out_tys>,)*)> = None;
-        static mut PWM_PINS: Option<(#(#pwm_tys,)*)> = None;
+        static mut PWM_PINS: Option<(#(PWMPin<#pwm_tys>,)*)> = None;
         static mut CHANNELS: Option<(#(#chan_tys,)*)> = None;
         static mut SERIALS: Option<(#(#ser_tys,)*)> = None;
         static mut TIMERS: Option<(#(#tim_tys,)*)> = None;

@@ -14,9 +14,12 @@ struct BluePill;
 impl BluePill {
     #[inline]
     fn init() {
-        use stm32f1xx_hal::gpio::{Edge, ExtiPin};
         use stm32f1xx_hal::prelude::*;
-        use embedded_rust::device::{InputPin, OutputPin, Pin, Port, Channel};
+        use stm32f1xx_hal::gpio::{self, Edge, ExtiPin};
+        use stm32f1xx_hal::timer::Timer;
+        use stm32f1xx_hal::pwm::{self, PwmChannel};
+        use stm32f1xx_hal::pac;
+        use embedded_rust::device::{InputPin, OutputPin, PWMPin, Pin, Port, Channel};
         use embedded_rust::resources::{Resource};
         use embedded_rust::Runtime;
         let peripherals = stm32f1xx_hal::pac::Peripherals::take().unwrap();
@@ -33,29 +36,23 @@ impl BluePill {
         pin_pa0.trigger_on_edge(&peripherals.EXTI, Edge::FALLING);
         pin_pa0.enable_interrupt(&peripherals.EXTI);
         let mut pin_pc13 = gpioc.pc13.into_push_pull_output(&mut gpioc.crh);
+        let pa1 = gpioa.pa1.into_alternate_push_pull(&mut gpioa.crl);
+        let timer = Timer::tim2(peripherals.TIM2, &clocks, &mut rcc.apb1);
+        let (pa1) = timer.pwm((pa1), &mut afio.mapr, 10000u32.hz()).split();
         static mut SYS: Option<()> = None;
-        static mut INPUT_PINS: Option<(
-            InputPin<
-                stm32f1xx_hal::gpio::gpioa::PA0<
-                    stm32f1xx_hal::gpio::Input<stm32f1xx_hal::gpio::PullUp>,
-                >,
-            >,
-        )> = None;
+        static mut INPUT_PINS: Option<(InputPin<gpio::gpioa::PA0<gpio::Input<gpio::PullUp>>>,)> =
+            None;
         static mut OUTPUT_PINS: Option<(
-            OutputPin<
-                stm32f1xx_hal::gpio::gpioc::PC13<
-                    stm32f1xx_hal::gpio::Output<stm32f1xx_hal::gpio::PushPull>,
-                >,
-            >,
+            OutputPin<gpio::gpioc::PC13<gpio::Output<gpio::PushPull>>>,
         )> = None;
-        static mut PWM: Option<()> = None;
+        static mut PWM_PINS: Option<(PWMPin<PwmChannel<pac::TIM2, pwm::C2>>,)> = None;
         static mut CHANNELS: Option<()> = None;
         static mut SERIALS: Option<()> = None;
         static mut TIMERS: Option<()> = None;
         static mut SYS_ARRAY: Option<[&'static mut dyn Resource; 0usize]> = None;
         static mut INPUT_ARRAY: Option<[&'static mut dyn Resource; 1usize]> = None;
         static mut OUTPUT_ARRAY: Option<[&'static mut dyn Resource; 1usize]> = None;
-        static mut PWM_ARRAY: Option<[&'static mut dyn Resource; 0usize]> = None;
+        static mut PWM_ARRAY: Option<[&'static mut dyn Resource; 1usize]> = None;
         static mut CHANNEL_ARRAY: Option<[&'static mut dyn Resource; 0usize]> = None;
         static mut SERIAL_ARRAY: Option<[&'static mut dyn Resource; 0usize]> = None;
         static mut TIMER_ARRAY: Option<[&'static mut dyn Resource; 0usize]> = None;
@@ -63,21 +60,21 @@ impl BluePill {
             SYS = Some(());
             INPUT_PINS = Some((InputPin::new(Pin::new(Channel::A, Port::P00), pin_pa0),));
             OUTPUT_PINS = Some((OutputPin::new(Pin::new(Channel::C, Port::P13), pin_pc13),));
-            PWM = Some(());
+            PWM_PINS = Some((PWMPin::new(Pin::new(Channel::A, Port::P01), pa1),));
             CHANNELS = Some(());
             SERIALS = Some(());
             TIMERS = Some(());
             let sys = SYS.as_mut().unwrap();
             let input_pins = INPUT_PINS.as_mut().unwrap();
             let output_pins = OUTPUT_PINS.as_mut().unwrap();
-            let pwm = PWM.as_mut().unwrap();
+            let pwm = PWM_PINS.as_mut().unwrap();
             let channels = CHANNELS.as_mut().unwrap();
             let serials = SERIALS.as_mut().unwrap();
             let timers = TIMERS.as_mut().unwrap();
             SYS_ARRAY = Some([]);
             INPUT_ARRAY = Some([&mut input_pins.0]);
             OUTPUT_ARRAY = Some([&mut output_pins.0]);
-            PWM_ARRAY = Some([]);
+            PWM_ARRAY = Some([&mut pwm.0]);
             CHANNEL_ARRAY = Some([]);
             SERIAL_ARRAY = Some([]);
             TIMER_ARRAY = Some([]);
@@ -123,10 +120,10 @@ fn __cortex_m_rt_main() -> ! {
 pub async fn test_task() {
     let mut button_events = BluePill::get_resource("event:gpio/pa0").unwrap();
     let mut led = BluePill::get_resource("digital:gpio/pc13").unwrap();
-    let mut led_light_state = false;
+    let mut led_state = false;
     let mut buf = [0; 1];
     while let Ok(_count) = button_events.read(&mut buf).await {
-        led_light_state = !led_light_state;
-        led.write(&[led_light_state as u8]).await.unwrap();
+        led_state = !led_state;
+        led.write(&[led_state as u8]).await.unwrap();
     }
 }

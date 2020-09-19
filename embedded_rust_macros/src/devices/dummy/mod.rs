@@ -9,6 +9,7 @@ use crate::types::{self, Direction, Gpio, Pin, PinMode, TriggerEdge};
 use quote::format_ident;
 use serde_derive::Deserialize;
 use syn::parse_str;
+use types::{PWMInterface, UnitHz};
 
 /// The Generator struct is used to introduce all code generation functions.
 /// It has to implement the Generator trait.
@@ -51,6 +52,12 @@ pub enum DummyPin {
     Three,
 }
 
+#[derive(Clone, Debug, Deserialize)]
+pub struct DummyPWM{
+    pins: Vec<DummyPin>,
+    frequency: (u32, UnitHz),
+}
+
 impl DeviceGeneration for DummyGenerator {
     fn generate_imports(&self) -> std::vec::Vec<syn::Stmt> {
         syn::parse_quote!(
@@ -89,6 +96,10 @@ impl GpioGeneration for DummyGenerator {
         //TODO:
         vec![]
     }
+}
+
+impl PWMGeneration for DummyGenerator{
+
 }
 
 // This implementation should already fit most perposes if you
@@ -141,5 +152,23 @@ impl Pin for DummyPin {
     }
     fn channel_constructor(&self) -> syn::Expr {
         parse_str(&format!("Channel::A")).unwrap()
+    }
+}
+
+impl PWMInterface for DummyPWM{
+    fn pins(&self) -> Vec<&dyn Pin> {
+        self.pins.iter().map(|pin|pin as &dyn Pin).collect()
+    }
+
+    fn tys(&self) -> Vec<syn::Type> {
+        todo!()
+    }
+
+    fn frequency(&self) -> types::Frequency {
+        types::Frequency::from(&self.frequency)
+    }
+
+    fn generate(&self) -> Vec<syn::Stmt> {
+        vec![]
     }
 }

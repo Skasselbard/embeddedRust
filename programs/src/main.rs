@@ -19,7 +19,12 @@ use embedded_rust_macros::*;
             "gpios": [
                 ["PA0", "input", "pull_up", "falling"],
                 ["PC13", "output", "push_pull"]
-            ]
+            ],
+            "pwm":[{
+                "timer":    "Tim2", 
+                "pins":     ["PA1"], 
+                "frequency":[10,"khz"]
+            }]
         }
     })
 ]

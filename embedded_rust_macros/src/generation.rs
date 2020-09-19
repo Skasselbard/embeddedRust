@@ -1,9 +1,9 @@
-use crate::{Frequency, Gpio, PWMInterface};
+use crate::{Frequency, Gpio, PWMInterface, types::Pin};
 use syn::{Stmt, Type};
 
 /// The Generator trait is used to determine the proper generation functions
 /// It is just a meta trait that combines all special generation traits.
-pub trait Generator: DeviceGeneration + GpioGeneration + SysGeneration {}
+pub trait Generator: DeviceGeneration + GpioGeneration + SysGeneration + PWMGeneration{}
 
 pub trait DeviceGeneration {
     /// Everything that should be used in the device init function with
@@ -42,6 +42,9 @@ pub trait PWMGeneration {
             stmts.append(&mut pwm.generate());
         }
         stmts
+    }
+    fn tys(&self, pwms: &Vec<&dyn PWMInterface>) -> Vec<Type>{
+        todo!()
     }
 }
 pub trait SysGeneration {

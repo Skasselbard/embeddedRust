@@ -1,14 +1,14 @@
-use super::{Pin, Timer, Generator};
-use crate::types::{UnitHz, PWMInterface, Frequency};
-use serde_derive::Deserialize;
+use super::{Generator, Pin, Timer};
 use crate::generation::PWMGeneration;
-use syn::{Stmt, parse_quote, parse_str};
+use crate::types::{Frequency, PWMInterface, UnitHz};
 use quote::format_ident;
+use serde_derive::Deserialize;
+use syn::{parse_quote, parse_str, Stmt};
 
 /// ```
 /// "pwm":[{
-///     "timer":    "Tim2", 
-///     "pins":     ["PA1"], 
+///     "timer":    "Tim2",
+///     "pins":     ["PA1"],
 ///     "frequency":[10,"khz"]
 /// }]
 /// ```
@@ -19,27 +19,32 @@ pub struct PWM {
     frequency: (u32, UnitHz),
 }
 
-
-
 impl PWMInterface for PWM {
     fn pins(&self) -> Vec<&dyn crate::types::Pin> {
-        self.pins.iter().map(|pin|pin as &dyn crate::types::Pin).collect()
+        self.pins
+            .iter()
+            .map(|pin| pin as &dyn crate::types::Pin)
+            .collect()
     }
 
     fn tys(&self) -> Vec<syn::Type> {
-        self.pins.iter().map(|pin|{
-            let timer = match self.timer{
-                Timer::Tim1 => {"TIM1"},
-                Timer::Tim2 => {"TIM2"},
-                Timer::Tim3 => {"TIM3"},
-                Timer::Tim4 => {"TIM4"},
-            };
-            parse_str(&format!(
-                "PwmChannel<pac::{}, pwm::{}>",
-                timer,
-                self.timer.channel(pin)
-            )).unwrap()
-        }).collect()
+        self.pins
+            .iter()
+            .map(|pin| {
+                let timer = match self.timer {
+                    Timer::Tim1 => "TIM1",
+                    Timer::Tim2 => "TIM2",
+                    Timer::Tim3 => "TIM3",
+                    Timer::Tim4 => "TIM4",
+                };
+                parse_str(&format!(
+                    "PwmChannel<pac::{}, pwm::{}>",
+                    timer,
+                    self.timer.channel(pin)
+                ))
+                .unwrap()
+            })
+            .collect()
     }
 
     fn frequency(&self) -> crate::types::Frequency {
@@ -51,14 +56,18 @@ impl PWMInterface for PWM {
         let peripherals = peripherals_ident!();
         let timer = format_ident!("{}", self.timer.name());
         let timer_upper = format_ident!("{}", self.timer.name().to_uppercase());
+        let timer_remap = format_ident!("{}", self.timer.remap(&self.pins));
         let apb = format_ident!("{}", self.timer.peripheral_bus());
         let frequency = Frequency::from(&self.frequency).0;
         let mut pin_ids = vec![];
-        for pin in &self.pins{
+        for pin in &self.pins {
             use crate::types::Pin;
             let channel = format_ident!("{}", pin.channel_name());
-            let pin_name= format_ident!("{}", pin.name());
-            let ctrl_reg = format_ident!("{}", super::gpio::control_reg(pin as &dyn crate::types::Pin));
+            let pin_name = format_ident!("{}", pin.name());
+            let ctrl_reg = format_ident!(
+                "{}",
+                super::gpio::control_reg(pin as &dyn crate::types::Pin)
+            );
             // expands to:
             // ``let pxy = gpiox.pxy.into_alternate_push_pull(&mut gpiox.crl);``
             stmts.append(&mut parse_quote!(
@@ -75,10 +84,10 @@ impl PWMInterface for PWM {
         // ```
         stmts.append(&mut parse_quote!(
             let timer = Timer::#timer(#peripherals.#timer_upper, &clocks, &mut rcc.#apb);
-            let (#(#pin_ids),*) = timer.pwm((#(#pin_ids),*), &mut afio.mapr, #frequency.hz()).split();
+            let (#(#pin_ids),*) = timer.pwm::<timer::#timer_remap, _, _, _>((#(#pin_ids),*), &mut afio.mapr, #frequency.hz()).split();
         ));
         stmts
     }
 }
 
-impl PWMGeneration for Generator{}
+impl PWMGeneration for Generator {}

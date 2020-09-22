@@ -31,7 +31,7 @@ pub enum ResourceError {
 }
 
 /// Inspired by the async io traits of the futures trait
-pub trait Resource: Sync + ToUri {
+pub trait Resource: ToUri {
     fn poll_read(&mut self, cx: &mut Context<'_>, buf: &mut [u8])
         -> Poll<Result<usize, io::Error>>;
     fn poll_write(&mut self, cx: &mut Context<'_>, buf: &[u8]) -> Poll<Result<usize, io::Error>>;

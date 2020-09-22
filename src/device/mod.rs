@@ -323,7 +323,7 @@ where
 
 impl<HalPWMPin, Duty> Resource for PWMPin<HalPWMPin>
 where
-    HalPWMPin: embedded_hal::PwmPin<Duty = Duty> + Sync,
+    HalPWMPin: embedded_hal::PwmPin<Duty = Duty>,
 {
     fn poll_read(
         &mut self,
@@ -347,7 +347,7 @@ where
 }
 impl<HalPWMPin, Duty> ToUri for PWMPin<HalPWMPin>
 where
-    HalPWMPin: embedded_hal::PwmPin<Duty = Duty> + Sync,
+    HalPWMPin: embedded_hal::PwmPin<Duty = Duty>,
 {
     fn to_uri<'uri>(&self, buffer: &'uri mut str) -> nom_uri::Uri<'uri> {
         let mut buffer = StrWriter::from(buffer);

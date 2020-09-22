@@ -15,7 +15,6 @@ use quote::format_ident;
 use serde_derive::Deserialize;
 use syn::{parse_quote, parse_str, Stmt, Type};
 
-
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Deserialize)]
 pub enum Timer {
     #[serde(alias = "tim1", alias = "TIM1")]
@@ -48,62 +47,72 @@ pub enum Timer {
     // Tim14,
 }
 
-impl Timer{
-    pub fn name(&self) -> String{
+impl Timer {
+    pub fn name(&self) -> String {
         match self {
-            Timer::Tim1 => {"tim1".into()},
-            Timer::Tim2 => {"tim2".into()},
-            Timer::Tim3 => {"tim3".into()},
-            Timer::Tim4 => {"tim4".into()},
+            Timer::Tim1 => "tim1".into(),
+            Timer::Tim2 => "tim2".into(),
+            Timer::Tim3 => "tim3".into(),
+            Timer::Tim4 => "tim4".into(),
         }
     }
-    pub fn peripheral_bus(&self) -> String{
+    pub fn remap(&self, _pins: &Vec<Pin>) -> String {
+        // FIXME: calculate remap type wit pins https://docs.rs/stm32f1xx-hal/0.6.1/stm32f1xx_hal/timer/index.html
         match self {
-            Timer::Tim1 =>{"apb2".into()},
-            Timer::Tim2 =>{"apb1".into()},
-            Timer::Tim3 =>{"apb1".into()},
-            Timer::Tim4 =>{panic!("tim 4 does not map on peripheral bus")},
+            Timer::Tim1 => "Tim1NoRemap".into(),
+            Timer::Tim2 => "Tim2NoRemap".into(),
+            Timer::Tim3 => "Tim3NoRemap".into(),
+            Timer::Tim4 => "Tim4NoRemap".into(),
+        }
+    }
+    pub fn peripheral_bus(&self) -> String {
+        match self {
+            Timer::Tim1 => "apb2".into(),
+            Timer::Tim2 => "apb1".into(),
+            Timer::Tim3 => "apb1".into(),
+            Timer::Tim4 => panic!("tim 4 does not map on peripheral bus"),
         }
     }
 
-    pub fn channel(&self, pin: &Pin) -> String{
+    pub fn channel(&self, pin: &Pin) -> String {
         match (self, pin) {
-            (Timer::Tim1 ,Pin::PA08) => {"C1"}
-            (Timer::Tim1 ,Pin::PA09) => {"C2"}
-            (Timer::Tim1 ,Pin::PA10) => {"C3"}
-            (Timer::Tim1 ,Pin::PA11) => {"C4"}
-            (Timer::Tim1 ,Pin::PE09) => {"C1"}
-            (Timer::Tim1 ,Pin::PE11) => {"C2"}
-            (Timer::Tim1 ,Pin::PE13) => {"C3"}
-            (Timer::Tim1 ,Pin::PE14) => {"C4"}
-            (Timer::Tim2, Pin::PA00) => {"C1"}
-            (Timer::Tim2 ,Pin::PA01) => {"C2"}
-            (Timer::Tim2 ,Pin::PA02) => {"C3"}
-            (Timer::Tim2 ,Pin::PA03) => {"C4"}
-            (Timer::Tim2 ,Pin::PA15) => {"C1"}
-            (Timer::Tim2 ,Pin::PB03) => {"C2"}
-            (Timer::Tim2 ,Pin::PB10) => {"C3"}
-            (Timer::Tim2 ,Pin::PB11) => {"C4"}
-            (Timer::Tim3 ,Pin::PA06) => {"C1"}
-            (Timer::Tim3 ,Pin::PA07) => {"C2"}
-            (Timer::Tim3 ,Pin::PB00) => {"C3"}
-            (Timer::Tim3 ,Pin::PB01) => {"C4"}
-            (Timer::Tim3 ,Pin::PB04) => {"C1"}
-            (Timer::Tim3 ,Pin::PB05) => {"C2"}
-            (Timer::Tim3 ,Pin::PC06) => {"C1"}
-            (Timer::Tim3 ,Pin::PC07) => {"C2"}
-            (Timer::Tim3 ,Pin::PC08) => {"C3"}
-            (Timer::Tim3 ,Pin::PC09) => {"C4"}
-            (Timer::Tim4 ,Pin::PC06) => {"C1"}
-            (Timer::Tim4 ,Pin::PC07) => {"C2"}
-            (Timer::Tim4 ,Pin::PC08) => {"C3"}
-            (Timer::Tim4 ,Pin::PC09) => {"C4"}
-            (Timer::Tim4 ,Pin::PD12) => {"C1"}
-            (Timer::Tim4 ,Pin::PD13) => {"C2"}
-            (Timer::Tim4 ,Pin::PD14) => {"C3"}
-            (Timer::Tim4 ,Pin::PD15) => {"C4"}
-            _ => panic!("pin does not map on timer channel")
-        }.into()
+            (Timer::Tim1, Pin::PA08) => "C1",
+            (Timer::Tim1, Pin::PA09) => "C2",
+            (Timer::Tim1, Pin::PA10) => "C3",
+            (Timer::Tim1, Pin::PA11) => "C4",
+            (Timer::Tim1, Pin::PE09) => "C1",
+            (Timer::Tim1, Pin::PE11) => "C2",
+            (Timer::Tim1, Pin::PE13) => "C3",
+            (Timer::Tim1, Pin::PE14) => "C4",
+            (Timer::Tim2, Pin::PA00) => "C1",
+            (Timer::Tim2, Pin::PA01) => "C2",
+            (Timer::Tim2, Pin::PA02) => "C3",
+            (Timer::Tim2, Pin::PA03) => "C4",
+            (Timer::Tim2, Pin::PA15) => "C1",
+            (Timer::Tim2, Pin::PB03) => "C2",
+            (Timer::Tim2, Pin::PB10) => "C3",
+            (Timer::Tim2, Pin::PB11) => "C4",
+            (Timer::Tim3, Pin::PA06) => "C1",
+            (Timer::Tim3, Pin::PA07) => "C2",
+            (Timer::Tim3, Pin::PB00) => "C3",
+            (Timer::Tim3, Pin::PB01) => "C4",
+            (Timer::Tim3, Pin::PB04) => "C1",
+            (Timer::Tim3, Pin::PB05) => "C2",
+            (Timer::Tim3, Pin::PC06) => "C1",
+            (Timer::Tim3, Pin::PC07) => "C2",
+            (Timer::Tim3, Pin::PC08) => "C3",
+            (Timer::Tim3, Pin::PC09) => "C4",
+            (Timer::Tim4, Pin::PC06) => "C1",
+            (Timer::Tim4, Pin::PC07) => "C2",
+            (Timer::Tim4, Pin::PC08) => "C3",
+            (Timer::Tim4, Pin::PC09) => "C4",
+            (Timer::Tim4, Pin::PD12) => "C1",
+            (Timer::Tim4, Pin::PD13) => "C2",
+            (Timer::Tim4, Pin::PD14) => "C3",
+            (Timer::Tim4, Pin::PD15) => "C4",
+            _ => panic!("pin does not map on timer channel"),
+        }
+        .into()
     }
 }
 
@@ -116,7 +125,7 @@ impl DeviceGeneration for Generator {
         parse_quote!(
             use stm32f1xx_hal::prelude::*;
             use stm32f1xx_hal::gpio::{self, Edge, ExtiPin};
-            use stm32f1xx_hal::timer::Timer;
+            use stm32f1xx_hal::timer::{self, Timer};
             use stm32f1xx_hal::pwm::{self, PwmChannel};
             use stm32f1xx_hal::pac;
             use embedded_rust::device::{InputPin, OutputPin, PWMPin, Pin, Port, Channel};

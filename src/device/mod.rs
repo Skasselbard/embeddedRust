@@ -7,15 +7,40 @@ pub(crate) use self::cortex_m::init_heap;
 #[cfg(feature = "stm32f1xx")]
 use stm32f1xx as dev;
 
-use crate::alloc::string::ToString;
 use crate::io::{self, SeekFrom};
 use crate::resources::StrWriter;
+use crate::{alloc::string::ToString, resources::ByteWriter};
 use crate::{Resource, ResourceID, RuntimeError};
 use core::cmp::Ordering;
+use core::convert::TryInto;
 use core::fmt::Write;
 use core::task::{Context, Poll};
 use embedded_hal::digital::v2;
 use nom_uri::{ToUri, Uri};
+
+macro_rules! to_target_endianess {
+    ($int:expr) => {
+        if cfg!(target_endian = "big") {
+            $int::to_be_bytes()
+        } else {
+            $int::to_le_bytes()
+        }
+    };
+}
+
+macro_rules! from_target_endianess {
+    ($int_type:ty, $array:expr) => {{
+        use core::convert::TryInto;
+        match $array.try_into() {
+            Ok(value) => Ok(if cfg!(target_endian = "big") {
+                <$int_type>::from_be_bytes(value)
+            } else {
+                <$int_type>::from_le_bytes(value)
+            }),
+            Err(e) => Err(e),
+        }
+    }};
+}
 
 pub type ExtiEvent = dev::ExtiEvent;
 pub type Channel = dev::Channel;
@@ -324,16 +349,37 @@ where
 impl<HalPWMPin, Duty> Resource for PWMPin<HalPWMPin>
 where
     HalPWMPin: embedded_hal::PwmPin<Duty = Duty>,
+    Duty: core::ops::Mul + core::convert::TryFrom<usize> + Into<usize>,
+    <Duty as core::convert::TryFrom<usize>>::Error: core::fmt::Debug,
 {
     fn poll_read(
         &mut self,
         _context: &mut Context,
-        _buf: &mut [u8],
+        buf: &mut [u8],
     ) -> Poll<Result<usize, io::Error>> {
-        unimplemented!()
+        let duty: usize = self.resource.get_duty().into();
+        let max: usize = self.resource.get_max_duty().into();
+        let mut buffer = ByteWriter::new(buf);
+        write!(buffer, "{}", (duty as f32 / max as f32)).map_err(|_| io::Error::InvalidInput)?;
+        Poll::Ready(Ok(buffer.written()))
     }
+    /// takes a f32 percentage (between 0.0 and 1.0) and sets duty accordingly
     fn poll_write(&mut self, _cx: &mut Context, buf: &[u8]) -> Poll<Result<usize, io::Error>> {
-        unimplemented!()
+        if buf.len() != core::mem::size_of::<f32>() {
+            return Poll::Ready(Err(io::Error::InvalidInput));
+        }
+        let percentage = match from_target_endianess!(f32, buf) {
+            Ok(v) => v,
+            Err(_) => return Poll::Ready(Err(io::Error::InvalidData)),
+        };
+        if percentage > 1.0 || percentage < 0.0 {
+            return Poll::Ready(Err(io::Error::InvalidData));
+        }
+        let max = self.resource.get_max_duty().into();
+        let duty = (max as f32 * percentage) as usize;
+        self.resource
+            .set_duty(duty.try_into().expect("pwm duty conversion error"));
+        Poll::Ready(Ok(core::mem::size_of::<f32>()))
     }
     fn poll_flush(&mut self, _: &mut Context<'_>) -> Poll<Result<(), io::Error>> {
         Poll::Ready(Ok(()))
@@ -353,7 +399,7 @@ where
         let mut buffer = StrWriter::from(buffer);
         write!(
             buffer,
-            "analog:pwm/p{}{}",
+            "percent:pwm/p{}{}",
             self.id.channel(),
             self.id.port()
         )
@@ -364,8 +410,13 @@ where
 impl<HalPWMPin, Duty> PWMPin<HalPWMPin>
 where
     HalPWMPin: embedded_hal::PwmPin<Duty = Duty>,
+    Duty: core::ops::Mul + core::convert::TryFrom<usize> + Into<usize>,
+    <Duty as core::convert::TryFrom<usize>>::Error: core::fmt::Debug,
 {
-    pub fn new(pin: Pin, hal_pin: HalPWMPin) -> Self {
+    // const DUTY_SIZE: usize = core::mem::size_of::<Duty>();
+    pub fn new(pin: Pin, mut hal_pin: HalPWMPin) -> Self {
+        hal_pin.set_duty(0.try_into().unwrap());
+        hal_pin.disable();
         PWMPin {
             id: pin,
             resource: hal_pin,

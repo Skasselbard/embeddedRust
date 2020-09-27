@@ -30,7 +30,7 @@ use device::GpioEvent;
 use events::Event;
 use nom_uri::Uri;
 use resources::{Resource, ResourceID};
-use schemes::{Hardware, Scheme, Virtual};
+use schemes::Scheme;
 
 pub struct Runtime {
     sys: &'static mut [&'static mut dyn Resource],
@@ -103,7 +103,7 @@ impl Runtime {
             ResourceID::Channel(index) => *self.channels.get_mut(*index as usize).unwrap(),
             ResourceID::Serial(index) => *self.serials.get_mut(*index as usize).unwrap(),
             ResourceID::Timer(index) => *self.timers.get_mut(*index as usize).unwrap(),
-            ResourceID::Virtual(key) => self
+            ResourceID::Generic(key) => self
                 .virtual_resources
                 .get_mut(key)
                 .expect("Missing virtual Resource")
@@ -116,33 +116,34 @@ impl Runtime {
         static NEXT_VIRTUAL_ID: AtomicU8 = AtomicU8::new(0);
         let parsed_uri = Uri::try_from(uri).or(Err(RuntimeError::UriParseError))?;
         match Scheme::from_str(parsed_uri.scheme()).map_err(|_| RuntimeError::ResourceNotFound)? {
-            Scheme::H(hw) => match hw {
-                Hardware::Digital => match parsed_uri.path() {
-                    path if path.starts_with("gpio") => {
-                        if let Ok(int) = self.search_resource_array(&parsed_uri, self.input_pins) {
-                            Ok(ResourceID::InputGpio(int))
-                        } else {
-                            self.search_resource_array(&parsed_uri, self.output_pins)
-                                .map(|int| ResourceID::OutputGpio(int))
-                        }
+            Scheme::Digital => match parsed_uri.path() {
+                path if path.starts_with("gpio") => {
+                    if let Ok(int) = self.search_resource_array(&parsed_uri, self.input_pins) {
+                        Ok(ResourceID::InputGpio(int))
+                    } else {
+                        self.search_resource_array(&parsed_uri, self.output_pins)
+                            .map(|int| ResourceID::OutputGpio(int))
                     }
-                    _ => unimplemented!(),
-                },
+                }
                 _ => unimplemented!(),
             },
-            Scheme::V(v) => match v {
-                Virtual::Event => self
-                    .search_virtual_resources(&parsed_uri)
-                    .map(|id| ResourceID::Virtual(id))
-                    .or({
-                        let id =
-                            NEXT_VIRTUAL_ID.fetch_add(1, core::sync::atomic::Ordering::Relaxed);
-                        let event = Box::new(GpioEvent::from_uri(uri)?);
-                        self.virtual_resources.insert(id, event);
-                        Ok(ResourceID::Virtual(id))
-                    }),
+            Scheme::Analog => match parsed_uri.path() {
+                path if path.starts_with("pwm") => self
+                    .search_resource_array(&parsed_uri, self.pwm)
+                    .map(|index| ResourceID::PWM(index)),
                 _ => unimplemented!(),
             },
+            Scheme::Event => self
+                .search_virtual_resources(&parsed_uri)
+                .map(|id| ResourceID::Generic(id))
+                .or({
+                    let id = NEXT_VIRTUAL_ID.fetch_add(1, core::sync::atomic::Ordering::Relaxed);
+                    let event = Box::new(GpioEvent::from_uri(uri)?);
+                    self.virtual_resources.insert(id, event);
+                    Ok(ResourceID::Generic(id))
+                }),
+            // TODO: concept for percentage
+            _ => unimplemented!(),
         }
     }
     fn search_resource_array(

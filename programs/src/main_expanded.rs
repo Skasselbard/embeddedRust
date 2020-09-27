@@ -14,14 +14,14 @@ struct BluePill;
 impl BluePill {
     #[inline]
     fn init() {
-        use stm32f1xx_hal::prelude::*;
-        use stm32f1xx_hal::gpio::{self, Edge, ExtiPin};
-        use stm32f1xx_hal::timer::Timer;
-        use stm32f1xx_hal::pwm::{self, PwmChannel};
-        use stm32f1xx_hal::pac;
-        use embedded_rust::device::{InputPin, OutputPin, PWMPin, Pin, Port, Channel};
-        use embedded_rust::resources::{Resource};
+        use embedded_rust::device::{Channel, InputPin, OutputPin, PWMPin, Pin, Port};
+        use embedded_rust::resources::Resource;
         use embedded_rust::Runtime;
+        use stm32f1xx_hal::gpio::{self, Edge, ExtiPin};
+        use stm32f1xx_hal::pac;
+        use stm32f1xx_hal::prelude::*;
+        use stm32f1xx_hal::pwm::{self, PwmChannel};
+        use stm32f1xx_hal::timer::{self, Timer};
         let peripherals = stm32f1xx_hal::pac::Peripherals::take().unwrap();
         let mut flash = peripherals.FLASH.constrain();
         let mut rcc = peripherals.RCC.constrain();
@@ -38,7 +38,9 @@ impl BluePill {
         let mut pin_pc13 = gpioc.pc13.into_push_pull_output(&mut gpioc.crh);
         let pa1 = gpioa.pa1.into_alternate_push_pull(&mut gpioa.crl);
         let timer = Timer::tim2(peripherals.TIM2, &clocks, &mut rcc.apb1);
-        let (pa1) = timer.pwm((pa1), &mut afio.mapr, 10000u32.hz()).split();
+        let (pa1) = timer
+            .pwm::<timer::Tim2NoRemap, _, _, _>((pa1), &mut afio.mapr, 10000u32.hz())
+            .split();
         static mut SYS: Option<()> = None;
         static mut INPUT_PINS: Option<(InputPin<gpio::gpioa::PA0<gpio::Input<gpio::PullUp>>>,)> =
             None;

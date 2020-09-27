@@ -3,7 +3,7 @@ use crate::events::{self, Event};
 use crate::io::{self, SeekFrom};
 use crate::resources::Resource;
 use crate::resources::StrWriter;
-use crate::schemes::{Scheme, Virtual};
+use crate::schemes::Scheme;
 use crate::{Runtime, RuntimeError};
 use core::fmt::Write;
 use core::str::FromStr;
@@ -78,7 +78,7 @@ pub enum Port {
 impl GpioEvent {
     pub fn from_uri(uri: &str) -> Result<Self, RuntimeError> {
         let mut parsed_uri = Uri::parse(uri).unwrap();
-        if let Ok(Scheme::V(Virtual::Event)) = Scheme::from_str(parsed_uri.scheme()) {
+        if let Ok(Scheme::Event) = Scheme::from_str(parsed_uri.scheme()) {
             parsed_uri.set_scheme("digital").unwrap();
             let mut buf_array = [0u8; 255];
             if let Ok(_) = Runtime::get().get_resource(parsed_uri.as_str(&mut buf_array).unwrap()) {

@@ -21,9 +21,9 @@ use nom_uri::{ToUri, Uri};
 macro_rules! to_target_endianess {
     ($int:expr) => {
         if cfg!(target_endian = "big") {
-            $int::to_be_bytes()
+            $int.to_be_bytes()
         } else {
-            $int::to_le_bytes()
+            $int.to_le_bytes()
         }
     };
 }
@@ -368,17 +368,27 @@ where
         if buf.len() != core::mem::size_of::<f32>() {
             return Poll::Ready(Err(io::Error::InvalidInput));
         }
+        // parse float
         let percentage = match from_target_endianess!(f32, buf) {
             Ok(v) => v,
             Err(_) => return Poll::Ready(Err(io::Error::InvalidData)),
         };
+        // disable if duty = 0
+        if percentage == 0.0 {
+            self.resource.disable();
+            return Poll::Ready(Ok(core::mem::size_of::<f32>()));
+        }
+        // check float boundaries
         if percentage > 1.0 || percentage < 0.0 {
             return Poll::Ready(Err(io::Error::InvalidData));
         }
+        // convert to target format
         let max = self.resource.get_max_duty().into();
         let duty = (max as f32 * percentage) as usize;
+        // set duty and enable pwm
         self.resource
             .set_duty(duty.try_into().expect("pwm duty conversion error"));
+        self.resource.enable();
         Poll::Ready(Ok(core::mem::size_of::<f32>()))
     }
     fn poll_flush(&mut self, _: &mut Context<'_>) -> Poll<Result<(), io::Error>> {
@@ -399,7 +409,7 @@ where
         let mut buffer = StrWriter::from(buffer);
         write!(
             buffer,
-            "percent:pwm/p{}{}",
+            "analog:pwm/p{}{}",
             self.id.channel(),
             self.id.port()
         )

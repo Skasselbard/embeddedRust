@@ -46,15 +46,60 @@ macro_rules! to_target_endianess {
     };
 }
 
+enum Level {
+    Full,
+    High,
+    Half,
+    Low,
+    Off,
+}
+
+struct Brightness {
+    level: Level,
+}
+
+impl Brightness {
+    fn next(&mut self) -> f32 {
+        match self.level {
+            Level::Full => {
+                self.level = Level::High;
+                0.75f32
+            }
+            Level::High => {
+                self.level = Level::Half;
+                0.5f32
+            }
+            Level::Half => {
+                self.level = Level::Low;
+                0.25f32
+            }
+            Level::Low => {
+                self.level = Level::Off;
+                0.0f32
+            }
+            Level::Off => {
+                self.level = Level::Full;
+                1.0f32
+            }
+        }
+    }
+}
+
 pub async fn test_task() {
     let mut button_events = BluePill::get_resource("event:gpio/pa0").unwrap();
     let mut led = BluePill::get_resource("digital:gpio/pc13").unwrap();
-    let mut pwm = BluePill::get_resource("percent:pwm/pa1").unwrap();
-    pwm.write(&to_target_endianess!(1.0f32)).await.unwrap();
+    let mut brightness = Brightness { level: Level::Off };
+    let mut pwm = BluePill::get_resource("analog:pwm/pa1").unwrap();
+    pwm.write(&to_target_endianess!(brightness.next()))
+        .await
+        .unwrap();
     let mut led_state = false;
     let mut buf = [0; 1];
     while let Ok(_count) = button_events.read(&mut buf).await {
         led_state = !led_state;
         led.write(&[led_state as u8]).await.unwrap();
+        pwm.write(&to_target_endianess!(brightness.next()))
+            .await
+            .unwrap();
     }
 }

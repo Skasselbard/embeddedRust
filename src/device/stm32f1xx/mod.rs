@@ -2,17 +2,33 @@
 mod usart;
 mod gpio;
 mod pwm;
+use crate::resources::gpio::Pin;
+use crate::resources::Resources;
 pub use gpio::*;
 pub use pwm::*;
 pub use usart::*;
 
 #[derive(Copy, Clone, PartialEq, Eq, Debug, Ord, PartialOrd)]
 pub enum ExtiEvent {
-    Gpio(super::Pin),
+    Gpio(Pin),
     Pvd,
     RtcAlarm,
     UsbWakeup,
     EthernetWakeup,
+}
+
+pub fn handle_exti_event(event: &ExtiEvent) {
+    match event {
+        ExtiEvent::Gpio(pin) => {
+            if let Ok(resource) = Resources::get_input_pin(pin) {
+                resource.handle_event()
+            }
+        }
+        ExtiEvent::Pvd => {}
+        ExtiEvent::RtcAlarm => {}
+        ExtiEvent::UsbWakeup => {}
+        ExtiEvent::EthernetWakeup => {}
+    }
 }
 
 /// The heap starts after the data segments of static values (.data and .bss)

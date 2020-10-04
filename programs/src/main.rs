@@ -89,7 +89,7 @@ pub async fn test_task() {
     let mut button_events = BluePill::get_resource("event:gpio/pa0").unwrap();
     let mut led = BluePill::get_resource("digital:gpio/pc13").unwrap();
     let mut brightness = Brightness { level: Level::Off };
-    let mut pwm = BluePill::get_resource("analog:pwm/pa1").unwrap();
+    let mut pwm = BluePill::get_resource("percent:pwm/pa1").unwrap();
     pwm.write(&to_target_endianess!(brightness.next()))
         .await
         .unwrap();

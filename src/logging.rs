@@ -28,7 +28,7 @@ impl log::Log for SimpleLogger {
     fn log(&self, record: &Record) {
         if self.enabled(record.metadata()) {
             use cortex_m_semihosting::hprintln;
-            hprintln!("{} - {}", record.level(), record.args()).unwrap();
+            hprintln!("{}: {}", record.level(), record.args()).unwrap();
         }
     }
 

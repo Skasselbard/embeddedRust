@@ -45,7 +45,7 @@ pub fn device_config(attr: TokenStream, item: TokenStream) -> TokenStream {
             #[inline]
             fn get_resource(
                 uri: &str
-            ) -> Result<embedded_rust::resources::ResourceID, embedded_rust::RuntimeError>{
+            ) -> Result<embedded_rust::resources::ResourceID, embedded_rust::resources::ResourceError>{
                 embedded_rust::Runtime::get().get_resource(uri)
             }
             #[inline]

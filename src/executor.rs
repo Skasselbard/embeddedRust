@@ -2,74 +2,18 @@ use super::*;
 use crate::events::Event;
 use alloc::collections::BTreeMap;
 use alloc::vec::Vec;
-use core::sync::atomic::AtomicUsize;
-use core::task::{RawWaker, RawWakerVTable, Waker};
+use core::task::Waker;
+use device::handle_exti_event;
 use heapless::consts::*;
 use heapless::spsc::{Queue, SingleCore};
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
-struct TaskID(usize);
-
-pub struct Task {
-    id: TaskID,
-    /// TODO: Maybe consider stack pinning:
-    /// https://doc.rust-lang.org/stable/std/pin/index.html#projections-and-structural-pinning
-    /// as mentioned in phil oppps blog:
-    /// https://os.phil-opp.com/async-await/#pinning
-    future: Pin<Box<dyn Future<Output = ()>>>,
-}
+use task::TaskID;
 
 pub struct Executor {
     tasks: BTreeMap<TaskID, Task>,
+    /// T = TaskID, max length = 256, index type = u8
     task_queue: Queue<TaskID, U256, u8, SingleCore>, //TODO: Multicore on feature
     /// If an event is fired, these wakers requeue the corresponding tasks
     event_wakers: BTreeMap<Event, Vec<Waker>>,
-}
-fn raw_waker(task: *const ()) -> RawWaker {
-    fn clone(task: *const ()) -> RawWaker {
-        raw_waker(task)
-    }
-    fn wake(task: *const ()) {
-        wake_by_ref(task)
-    }
-    fn wake_by_ref(task: *const ()) {
-        unsafe { Runtime::get().executor.reque((*(task as *const Task)).id) }
-    }
-    fn drop(_task: *const ()) {}
-
-    let vtable = &RawWakerVTable::new(clone, wake, wake_by_ref, drop);
-    RawWaker::new(task, vtable)
-}
-
-impl TaskID {
-    #[inline]
-    fn new() -> Self {
-        static NEXT_ID: AtomicUsize = AtomicUsize::new(0);
-        TaskID(NEXT_ID.fetch_add(1, core::sync::atomic::Ordering::Relaxed))
-    }
-}
-
-impl Task {
-    /// zero is highest priority
-    pub fn new(future: impl Future<Output = ()> + 'static) -> Task {
-        Task {
-            id: TaskID::new(),
-            future: Box::pin(future),
-        }
-    }
-    #[inline]
-    pub fn spawn(self) {
-        Runtime::get().spawn_task(self)
-    }
-    #[inline]
-    fn poll(&mut self, context: &mut Context) -> Poll<()> {
-        self.future.as_mut().poll(context)
-    }
-    /// moves task into waker
-    #[inline]
-    fn waker(&self) -> Waker {
-        unsafe { Waker::from_raw(raw_waker(self as *const Task as *const ())) }
-    }
 }
 
 impl Executor {
@@ -83,11 +27,11 @@ impl Executor {
     }
 
     pub fn spawn(&mut self, task: Task) {
-        self.task_queue.enqueue(task.id).expect("task queue full");
-        self.tasks.insert(task.id, task);
+        self.task_queue.enqueue(task.id()).expect("task queue full");
+        self.tasks.insert(task.id(), task);
     }
     #[inline]
-    fn reque(&mut self, task_id: TaskID) {
+    pub(crate) fn reque(&mut self, task_id: TaskID) {
         self.task_queue.enqueue(task_id).expect("task queue full")
     }
     pub fn run(&mut self) {
@@ -108,13 +52,24 @@ impl Executor {
     }
     #[inline]
     fn wake_tasks(&mut self) {
-        //TODO: remove duplicates
         while let Some(event) = events::next() {
             if let Some(wakers) = self.event_wakers.get_mut(&event) {
+                // only do event specific things if someone actuall is expecting events
+                // log::info!("E");
+                Self::handle_event(&event);
                 while let Some(waker) = wakers.pop() {
                     waker.wake_by_ref()
                 }
             }
+        }
+    }
+
+    /// Trigger event specific behaviour
+    #[inline]
+    fn handle_event(event: &Event) {
+        match event {
+            Event::ExternalInterrupt(exti_event) => handle_exti_event(exti_event),
+            Event::DeviceInterrupt => {}
         }
     }
 
@@ -128,20 +83,3 @@ impl Executor {
         wakers.push(waker.clone());
     }
 }
-
-impl Eq for Task {}
-impl PartialEq for Task {
-    fn eq(&self, other: &Self) -> bool {
-        core::ptr::eq(&self.id, &other.id)
-    }
-}
-// impl Ord for Task {
-//     fn cmp(&self, other: &Self) -> core::cmp::Ordering {
-//         self.priority.cmp(&other.priority)
-//     }
-// }
-// impl PartialOrd for Task {
-//     fn partial_cmp(&self, other: &Self) -> Option<core::cmp::Ordering> {
-//         Some(self.cmp(other))
-//     }
-// }

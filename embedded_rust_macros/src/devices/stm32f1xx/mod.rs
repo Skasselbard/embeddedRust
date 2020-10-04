@@ -128,7 +128,8 @@ impl DeviceGeneration for Generator {
             use stm32f1xx_hal::timer::{self, Timer};
             use stm32f1xx_hal::pwm::{self, PwmChannel};
             use stm32f1xx_hal::pac;
-            use embedded_rust::device::{InputPin, OutputPin, PWMPin, Pin, Port, Channel};
+            use embedded_rust::resources::{Pin, InputPin, OutputPin, PWMPin};
+            use embedded_rust::device::{Port, Channel};
             use embedded_rust::resources::{Resource};
             use embedded_rust::Runtime;
         )

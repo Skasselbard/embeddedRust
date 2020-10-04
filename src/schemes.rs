@@ -7,10 +7,12 @@ pub enum Scheme {
     Analog,
     Digital,
     Event,
-    Sys,
+    Sys, //TODO: May should be a file scheme
     Percent,
 }
-pub struct ParseSchemeError;
+pub enum SchemeError {
+    ParseError,
+}
 
 #[allow(unused)]
 impl Scheme {
@@ -73,7 +75,7 @@ impl Scheme {
 }
 
 impl FromStr for Scheme {
-    type Err = ParseSchemeError;
+    type Err = SchemeError;
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         match s {
             "memory" => Ok(Scheme::Memory),
@@ -83,7 +85,7 @@ impl FromStr for Scheme {
             "event" => Ok(Scheme::Event),
             "sys" => Ok(Scheme::Sys),
             "percent" => Ok(Scheme::Percent),
-            _ => Err(ParseSchemeError),
+            _ => Err(SchemeError::ParseError),
         }
     }
 }

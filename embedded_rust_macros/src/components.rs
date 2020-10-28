@@ -1,7 +1,4 @@
-use crate::types::{Gpio, PWMInterface, Pin};
 use crate::Config;
-use crate::{Direction, Frequency};
-use quote::format_ident;
 use syn::{parse_str, Expr, Ident, Stmt, Type};
 
 pub trait Component {

@@ -14,14 +14,15 @@ struct BluePill;
 impl BluePill {
     #[inline]
     fn init() {
-        use embedded_rust::device::{Channel, InputPin, OutputPin, PWMPin, Pin, Port};
-        use embedded_rust::resources::Resource;
-        use embedded_rust::Runtime;
-        use stm32f1xx_hal::gpio::{self, Edge, ExtiPin};
-        use stm32f1xx_hal::pac;
         use stm32f1xx_hal::prelude::*;
-        use stm32f1xx_hal::pwm::{self, PwmChannel};
+        use stm32f1xx_hal::gpio::{self, Edge, ExtiPin};
         use stm32f1xx_hal::timer::{self, Timer};
+        use stm32f1xx_hal::pwm::{self, PwmChannel};
+        use stm32f1xx_hal::pac;
+        use embedded_rust::resources::{Pin, InputPin, OutputPin, PWMPin};
+        use embedded_rust::device::{Port, Channel};
+        use embedded_rust::resources::{Resource};
+        use embedded_rust::Runtime;
         let peripherals = stm32f1xx_hal::pac::Peripherals::take().unwrap();
         let mut flash = peripherals.FLASH.constrain();
         let mut rcc = peripherals.RCC.constrain();
@@ -98,7 +99,7 @@ impl BluePill {
     #[inline]
     fn get_resource(
         uri: &str,
-    ) -> Result<embedded_rust::resources::ResourceID, embedded_rust::RuntimeError> {
+    ) -> Result<embedded_rust::resources::ResourceID, embedded_rust::resources::ResourceError> {
         embedded_rust::Runtime::get().get_resource(uri)
     }
     #[inline]
@@ -119,13 +120,65 @@ fn __cortex_m_rt_main() -> ! {
     Task::new(test_task()).spawn();
     BluePill::run();
 }
+enum Level {
+    Full,
+    High,
+    Half,
+    Low,
+    Off,
+}
+struct Brightness {
+    level: Level,
+}
+impl Brightness {
+    fn next(&mut self) -> f32 {
+        match self.level {
+            Level::Full => {
+                self.level = Level::High;
+                0.75f32
+            }
+            Level::High => {
+                self.level = Level::Half;
+                0.5f32
+            }
+            Level::Half => {
+                self.level = Level::Low;
+                0.25f32
+            }
+            Level::Low => {
+                self.level = Level::Off;
+                0.0f32
+            }
+            Level::Off => {
+                self.level = Level::Full;
+                1.0f32
+            }
+        }
+    }
+}
 pub async fn test_task() {
     let mut button_events = BluePill::get_resource("event:gpio/pa0").unwrap();
     let mut led = BluePill::get_resource("digital:gpio/pc13").unwrap();
+    let mut brightness = Brightness { level: Level::Off };
+    let mut pwm = BluePill::get_resource("analog:pwm/pa1").unwrap();
+    pwm.write(&if false {
+        brightness.next().to_be_bytes()
+    } else {
+        brightness.next().to_le_bytes()
+    })
+    .await
+    .unwrap();
     let mut led_state = false;
     let mut buf = [0; 1];
     while let Ok(_count) = button_events.read(&mut buf).await {
         led_state = !led_state;
         led.write(&[led_state as u8]).await.unwrap();
+        pwm.write(&if false {
+            brightness.next().to_be_bytes()
+        } else {
+            brightness.next().to_le_bytes()
+        })
+        .await
+        .unwrap();
     }
 }

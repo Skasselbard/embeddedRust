@@ -1,5 +1,10 @@
 use core::str::FromStr;
 
+use crate::resources::{
+    path::{IndexedPath, ResourceMode},
+    ResourceError,
+};
+
 #[derive(Copy, Clone, PartialEq, Eq, Debug, Ord, PartialOrd, Hash)]
 pub enum Scheme {
     Memory,
@@ -14,6 +19,82 @@ pub enum SchemeError {
     ParseError,
 }
 
+pub struct Memory {
+    index: IndexedPath,
+    mode: ResourceMode,
+}
+pub struct Bus {
+    index: IndexedPath,
+    mode: ResourceMode,
+}
+pub struct Analog {
+    index: IndexedPath,
+    mode: ResourceMode,
+}
+pub struct Digital {
+    index: IndexedPath,
+    mode: ResourceMode,
+}
+pub struct Event {
+    index: IndexedPath,
+    mode: ResourceMode,
+}
+pub struct Sys {
+    index: IndexedPath,
+    mode: ResourceMode,
+}
+pub struct Percent {
+    index: IndexedPath,
+    mode: ResourceMode,
+}
+impl Memory {
+    pub(crate) fn new(index: IndexedPath, mode: ResourceMode) -> Self {
+        Self { index, mode }
+    }
+}
+impl Bus {
+    pub(crate) fn new(index: IndexedPath, mode: ResourceMode) -> Self {
+        Self { index, mode }
+    }
+}
+impl Analog {
+    pub(crate) fn new(index: IndexedPath, mode: ResourceMode) -> Self {
+        Self { index, mode }
+    }
+}
+impl Digital {
+    pub(crate) fn new(index: IndexedPath, mode: ResourceMode) -> Self {
+        Self { index, mode }
+    }
+    //TODO: implement
+    pub async fn is_high(&self) -> Result<bool, ResourceError> {
+        unimplemented!()
+    }
+    pub async fn is_low(&self) -> Result<bool, ResourceError> {
+        unimplemented!()
+    }
+    pub async fn set_high(&self) -> Result<(), ResourceError> {
+        unimplemented!()
+    }
+    pub async fn set_low(&self) -> Result<(), ResourceError> {
+        unimplemented!()
+    }
+}
+impl Event {
+    pub(crate) fn new(index: IndexedPath, mode: ResourceMode) -> Self {
+        Self { index, mode }
+    }
+}
+impl Sys {
+    pub(crate) fn new(index: IndexedPath, mode: ResourceMode) -> Self {
+        Self { index, mode }
+    }
+}
+impl Percent {
+    pub(crate) fn new(index: IndexedPath, mode: ResourceMode) -> Self {
+        Self { index, mode }
+    }
+}
 #[allow(unused)]
 impl Scheme {
     #[inline]

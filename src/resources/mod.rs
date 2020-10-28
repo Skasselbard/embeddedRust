@@ -1,18 +1,19 @@
 pub mod gpio;
 pub mod path;
 pub mod pwm;
+pub mod serial;
 pub mod sys;
 
-use crate::Runtime;
+use crate::schemes::{Analog, Bus, Digital, Event, Memory, Percent, Scheme, Sys};
 use crate::{
     io::{self, AsyncRead, AsyncSeek, AsyncWrite},
-    schemes::Scheme,
+    Runtime,
 };
-use core::str::Split;
 use core::task::{Context, Poll};
 pub use gpio::{InputPin, OutputPin, Pin};
 use nom_uri::Uri;
 use path::{IndexedPath, RawPath, ResourceMode};
+use pwm::PWMMode;
 pub use pwm::PWMPin;
 pub use sys::SysResource;
 
@@ -135,35 +136,6 @@ impl Resources {
     // }
 }
 
-pub struct Memory {
-    index: IndexedPath,
-    mode_suffix: ResourceMode,
-}
-pub struct Bus {
-    index: IndexedPath,
-    mode: ResourceMode,
-}
-pub struct Analog {
-    index: IndexedPath,
-    mode: ResourceMode,
-}
-pub struct Digital {
-    index: IndexedPath,
-    mode: ResourceMode,
-}
-pub struct Event {
-    index: IndexedPath,
-    mode: ResourceMode,
-}
-pub struct Sys {
-    index: IndexedPath,
-    mode: ResourceMode,
-}
-pub struct Percent {
-    index: IndexedPath,
-    mode: ResourceMode,
-}
-
 /// Inspired by the async io traits of the futures trait
 pub trait Resource {
     fn poll_read(
@@ -221,21 +193,39 @@ impl ResourceID {
         unimplemented!()
     }
     pub fn into_analog(self) -> Result<Analog, ResourceError> {
-        unimplemented!()
+        match self.index {
+            IndexedPath::PWM(_) => {
+                if let ResourceMode::PWM(PWMMode::Default) = self.mode {
+                    {
+                        Ok(Analog::new(self.index, self.mode))
+                    }
+                } else {
+                    Err(ResourceError::ConversionError)
+                }
+            }
+            IndexedPath::ADCPin(_) => Ok(Analog::new(self.index, self.mode)),
+            _ => Err(ResourceError::ConversionError),
+        }
     }
     pub fn into_digital(self) -> Result<Digital, ResourceError> {
-        unimplemented!()
+        match self.index {
+            IndexedPath::InputGpio(_) | IndexedPath::OutputGpio(_) => {
+                Ok(Digital::new(self.index, self.mode))
+            }
+            _ => Err(ResourceError::ConversionError),
+        }
     }
     pub fn into_event(self) -> Result<Event, ResourceError> {
-        unimplemented!()
+        match self.index {
+            IndexedPath::InputGpio(_) => Ok(Event::new(self.index, self.mode)),
+            //TODO: Timer/ Serial
+            _ => Err(ResourceError::ConversionError),
+        }
     }
     pub fn into_sys(self) -> Result<Sys, ResourceError> {
         unimplemented!()
     }
     pub fn into_percent(self) -> Result<Percent, ResourceError> {
-        unimplemented!()
-    }
-    fn parse_mode(mode: Split<char>) -> ResourceMode {
         unimplemented!()
     }
 }

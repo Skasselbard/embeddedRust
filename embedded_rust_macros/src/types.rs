@@ -188,6 +188,14 @@ pub trait PWMInterface {
     fn generate(&self) -> Vec<syn::Stmt>;
 }
 
+pub trait SerialInterface {
+    fn receive_pin(&self) -> &dyn Pin;
+    fn transmit_pin(&self) -> &dyn Pin;
+    // fn tys(&self) -> Vec<Type>;
+    fn baud(&self) -> Baud;
+    // fn generate(&self) -> Vec<syn::Stmt>;
+}
+
 /// The trait that each device pin should implement. For a complex example impression
 /// look at the Pin implementation of the stm32f1xx::device.
 pub trait Pin {
@@ -257,12 +265,16 @@ pub enum UnitByte {
     #[serde(alias = "g", alias = "G", alias = "gb", alias = "GB")]
     GB,
 }
+
 #[derive(Deserialize, Debug)]
 pub enum Log {
     // level: log::Level,
 // sink: uri
 }
+#[derive(Deserialize, Debug, Copy, Clone)]
+pub struct Baud(pub u32);
 
+#[derive(Deserialize, Debug, Copy, Clone)]
 pub struct Frequency(pub u32);
 
 impl Frequency {

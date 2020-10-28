@@ -6,6 +6,7 @@ macro_rules! peripherals_ident {
 
 pub mod gpio;
 mod pwm;
+mod serial;
 
 pub use self::gpio::*;
 pub use self::pwm::*;

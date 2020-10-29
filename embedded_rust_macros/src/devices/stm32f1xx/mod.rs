@@ -10,6 +10,7 @@ mod serial;
 
 pub use self::gpio::*;
 pub use self::pwm::*;
+pub use self::serial::*;
 use crate::generation::{self, DeviceGeneration, GpioGeneration, SysGeneration};
 use crate::types::{Direction, Frequency, Gpio, PinMode, TriggerEdge};
 use quote::format_ident;

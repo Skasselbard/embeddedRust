@@ -1,5 +1,4 @@
 use crate::types::{self, Direction, PinMode, TriggerEdge};
-use crate::Component;
 use quote::format_ident;
 use serde_derive::Deserialize;
 use syn::{parse_str, Ident, Type};
@@ -25,12 +24,6 @@ impl types::Gpio for StmGpio {
     fn trigger_edge(&self) -> Option<TriggerEdge> {
         self.3
     }
-}
-
-impl Component for StmGpio
-where
-    StmGpio: types::Gpio,
-{
     fn identifier(&self) -> Ident {
         format_ident!("pin_{}", (self as &dyn types::Gpio).pin().name())
     }

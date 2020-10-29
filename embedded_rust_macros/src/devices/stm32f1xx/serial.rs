@@ -5,11 +5,11 @@ use serde_derive::Deserialize;
 use syn::{parse_quote, parse_str, Stmt};
 
 /// ```
-/// "Serial":{
+/// "Serial":[{
 ///     "rx":     "PA1",
 ///     "tx":     "PA1",
 ///     "baudrate": "9600"
-/// }
+/// }]
 /// ```
 #[derive(Debug, Clone, Deserialize)]
 pub struct Serial {

@@ -3,9 +3,9 @@
 //! the acces functions of the Config enum (the compiler will complain^^).
 //!
 //! Look at the trait documentation for more information what the functions are used for.
-use crate::components::Component;
-use crate::generation::*;
+use crate::types::SerialInterface;
 use crate::types::{self, Direction, Gpio, Pin, PinMode, TriggerEdge};
+use crate::{generation::*, types::Baud};
 use quote::format_ident;
 use serde_derive::Deserialize;
 use syn::parse_str;
@@ -53,9 +53,18 @@ pub enum DummyPin {
 }
 
 #[derive(Clone, Debug, Deserialize)]
-pub struct DummyPWM{
+pub struct DummyPWM {
     pins: Vec<DummyPin>,
     frequency: (u32, UnitHz),
+}
+#[derive(Clone, Debug, Deserialize)]
+pub struct DummySerial {
+    #[serde(alias = "rx", alias = "receive")]
+    receive_pin: DummyPin,
+    #[serde(alias = "tx", alias = "transmit")]
+    transmit_pin: DummyPin,
+    #[serde(alias = "speed", alias = "baud")]
+    baudrate: Baud,
 }
 
 impl DeviceGeneration for DummyGenerator {
@@ -98,9 +107,7 @@ impl GpioGeneration for DummyGenerator {
     }
 }
 
-impl PWMGeneration for DummyGenerator{
-
-}
+impl PWMGeneration for DummyGenerator {}
 
 // This implementation should already fit most perposes if you
 // held on to the DummyGpio tuple struct example
@@ -117,12 +124,6 @@ impl Gpio for DummyGpio {
     fn trigger_edge(&self) -> std::option::Option<types::TriggerEdge> {
         self.3
     }
-}
-
-impl Component for DummyGpio
-where
-    DummyGpio: types::Gpio,
-{
     fn identifier(&self) -> syn::Ident {
         format_ident!("pin_{}", (self as &dyn types::Gpio).pin().name())
     }
@@ -155,9 +156,9 @@ impl Pin for DummyPin {
     }
 }
 
-impl PWMInterface for DummyPWM{
+impl PWMInterface for DummyPWM {
     fn pins(&self) -> Vec<&dyn Pin> {
-        self.pins.iter().map(|pin|pin as &dyn Pin).collect()
+        self.pins.iter().map(|pin| pin as &dyn Pin).collect()
     }
 
     fn tys(&self) -> Vec<syn::Type> {
@@ -170,5 +171,19 @@ impl PWMInterface for DummyPWM{
 
     fn generate(&self) -> Vec<syn::Stmt> {
         vec![]
+    }
+}
+
+impl SerialInterface for DummySerial {
+    fn receive_pin(&self) -> &dyn crate::types::Pin {
+        &self.receive_pin
+    }
+
+    fn transmit_pin(&self) -> &dyn crate::types::Pin {
+        &self.transmit_pin
+    }
+
+    fn baud(&self) -> Baud {
+        self.baudrate
     }
 }

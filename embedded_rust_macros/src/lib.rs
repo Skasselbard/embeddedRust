@@ -1,26 +1,25 @@
-mod components;
+mod config;
 mod devices;
 mod generation;
 mod types;
 // use embedded_rust::device::stm32f1xx::{Gpio, TriggerEdge};
-use components::*;
+use config::Config;
 use proc_macro::TokenStream;
 use quote::quote;
-use syn::{parse_macro_input, parse_quote, parse_str, Expr, ExprUnsafe, ItemStruct, Stmt};
+use syn::{parse_macro_input, parse_quote, parse_str, Expr, ExprUnsafe, ItemStruct, Stmt, Type};
 use types::*;
 
 #[proc_macro_attribute]
 pub fn device_config(attr: TokenStream, item: TokenStream) -> TokenStream {
     let config = parse_json(&attr);
-    let components = parse_components(&config);
     let strukt = parse_macro_input!(item as ItemStruct);
     let struct_name = strukt.ident.clone();
-    let statiks = generate_component_statics(&components);
-    let static_init = generate_static_init(&components);
+    let statiks = generate_component_statics(&config);
+    let static_init = generate_static_init(&config);
     let heap_size = config.sys().heap_size();
 
-    let init_stmts = components.init_stmts;
-    let interrupt_unmasks = components.interrupt_unmasks;
+    let init_stmts = config.init_statements();
+    let interrupt_unmasks = config.interrupt_unmasks();
     quote!(
         #strukt
         impl #struct_name{
@@ -61,22 +60,22 @@ pub fn device_config(attr: TokenStream, item: TokenStream) -> TokenStream {
     // quote!().into()
 }
 
-fn generate_component_statics(components: &Components) -> Vec<Stmt> {
-    let sys_tys = &components.sys.ty;
-    let in_tys = &components.input_pins.ty;
-    let out_tys = &components.output_pins.ty;
-    let pwm_tys = &components.pwm_pins.ty;
-    let chan_tys = &components.channels.ty;
-    let ser_tys = &components.serials.ty;
-    let tim_tys = &components.serials.ty;
+fn generate_component_statics(config: &Config) -> Vec<Stmt> {
+    let sys_tys: &Vec<Type> = &vec![];
+    let in_tys = &config.input_tys();
+    let out_tys = &config.output_tys();
+    let pwm_tys = &config.pwm_tys();
+    let chan_tys: &Vec<Type> = &vec![];
+    let ser_tys: &Vec<Type> = &vec![];
+    let tim_tys: &Vec<Type> = &vec![];
 
-    let sys_len = components.sys.identifiers.len();
-    let in_len = components.input_pins.identifiers.len();
-    let out_len = components.output_pins.identifiers.len();
-    let pwm_len = components.pwm_pins.identifiers.len();
-    let chan_len = components.channels.identifiers.len();
-    let ser_len = components.serials.identifiers.len();
-    let tim_len = components.timers.identifiers.len();
+    let sys_len = 0usize;
+    let in_len = config.input_idents().len();
+    let out_len = config.output_idents().len();
+    let pwm_len = config.pwm_idents().len();
+    let chan_len = 0usize;
+    let ser_len = 0usize;
+    let tim_len = 0usize;
 
     let statics: Vec<Stmt> = parse_quote!(
         // Tuple witch concrete objects
@@ -100,31 +99,31 @@ fn generate_component_statics(components: &Components) -> Vec<Stmt> {
     statics.into()
 }
 
-fn generate_static_init(components: &Components) -> ExprUnsafe {
-    let sys_idents = &components.sys.identifiers;
-    let in_idents = &components.input_pins.identifiers;
-    let out_idents = &components.output_pins.identifiers;
-    let pwm_idents = &components.pwm_pins.identifiers;
-    let channel_idents = &components.channels.identifiers;
-    let serial_idents = &components.serials.identifiers;
-    let timer_idents = &components.timers.identifiers;
+fn generate_static_init(config: &Config) -> ExprUnsafe {
+    let sys_idents: &Vec<Type> = &vec![];
+    let in_idents = &config.input_idents();
+    let out_idents = &config.output_idents();
+    let pwm_idents = &config.pwm_idents();
+    let channel_idents: &Vec<Type> = &vec![];
+    let serial_idents: &Vec<Type> = &vec![];
+    let timer_idents: &Vec<Type> = &vec![];
 
-    let sys_index = (0..components.sys.identifiers.len()).map(syn::Index::from);
-    let in_index = (0..components.input_pins.identifiers.len()).map(syn::Index::from);
-    let out_index = (0..components.output_pins.identifiers.len()).map(syn::Index::from);
-    let pwm_index = (0..components.pwm_pins.identifiers.len()).map(syn::Index::from);
-    let chan_index = (0..components.channels.identifiers.len()).map(syn::Index::from);
-    let ser_index = (0..components.serials.identifiers.len()).map(syn::Index::from);
-    let tim_index = (0..components.timers.identifiers.len()).map(syn::Index::from);
+    let sys_index = (0..0usize).map(syn::Index::from);
+    let in_index = (0..config.input_idents().len()).map(syn::Index::from);
+    let out_index = (0..config.output_idents().len()).map(syn::Index::from);
+    let pwm_index = (0..config.pwm_idents().len()).map(syn::Index::from);
+    let chan_index = (0..0usize).map(syn::Index::from);
+    let ser_index = (0..0usize).map(syn::Index::from);
+    let tim_index = (0..0usize).map(syn::Index::from);
 
-    let in_channels = &components.input_pins.channels;
-    let in_ports = &components.input_pins.ports;
+    let in_channels = &config.input_channels();
+    let in_ports = &config.input_ports();
 
-    let out_channels = &components.output_pins.channels;
-    let out_ports = &components.output_pins.ports;
+    let out_channels = &config.output_channels();
+    let out_ports = &config.output_ports();
 
-    let pwm_channels = &components.pwm_pins.channels;
-    let pwm_ports = &components.pwm_pins.ports;
+    let pwm_channels = &config.pwm_channels();
+    let pwm_ports = &config.pwm_ports();
 
     parse_quote!(
         unsafe{
@@ -169,6 +168,6 @@ fn generate_sys_objects(config: &Config) -> Vec<Expr> {
     }
 }
 
-pub(crate) fn parse_json(attributes: &TokenStream) -> types::Config {
+pub(crate) fn parse_json(attributes: &TokenStream) -> Config {
     serde_json::from_str(&attributes.to_string()).expect("ParsingError")
 }

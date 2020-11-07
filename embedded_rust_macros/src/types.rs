@@ -18,14 +18,18 @@ pub trait Gpio {
 
 pub trait PWMInterface {
     fn pins(&self) -> Vec<&dyn Pin>;
+    fn pins_as_gpios(&self) -> Vec<Box<dyn Gpio>>;
     fn tys(&self) -> Vec<Type>;
     fn frequency(&self) -> Frequency;
     fn generate(&self) -> Vec<syn::Stmt>;
 }
 
-pub trait SerialInterface {
+pub trait Serial {
+    fn name(&self) -> String;
     fn receive_pin(&self) -> &dyn Pin;
     fn transmit_pin(&self) -> &dyn Pin;
+    fn reveceive_as_gpio(&self) -> Box<dyn Gpio>;
+    fn transmit_as_gpio(&self) -> Box<dyn Gpio>;
     // fn tys(&self) -> Vec<Type>;
     fn baud(&self) -> Baud;
     // fn generate(&self) -> Vec<syn::Stmt>;
@@ -141,6 +145,7 @@ pub enum Direction {
     Input,
     #[serde(alias = "output", alias = "OUTPUT")]
     Output,
+    Alternate,
 }
 
 #[derive(Eq, PartialEq, Clone, Copy, Debug, Hash, Deserialize)]
@@ -188,6 +193,7 @@ impl Direction {
         match self {
             Direction::Input => "Input",
             Direction::Output => "Output",
+            Direction::Alternate => "Alternate",
         }
         .into()
     }

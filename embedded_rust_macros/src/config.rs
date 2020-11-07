@@ -4,8 +4,8 @@ use serde_derive::Deserialize;
 use crate::devices::{dummy, stm32f1xx};
 use crate::generation::Generator;
 use crate::types;
-use syn::{Expr, Ident, Stmt, Type};
-use types::{Direction, Frequency, Gpio, PWMInterface, Pin, SerialInterface};
+use syn::{parse_quote, Expr, Ident, Stmt, Type};
+use types::{Direction, Frequency, Gpio, PWMInterface, Pin, Serial};
 
 /// This is the struct that is parsed from the macro input.
 /// It is an enum where each variant determines the different boards.
@@ -22,7 +22,9 @@ pub enum Config {
         sys: types::Sys,
         #[serde(default, alias = "gpios")]
         gpios: Vec<dummy::DummyGpio>,
+        #[serde(default)]
         pwm: Vec<dummy::DummyPWM>,
+        #[serde(default)]
         serial: Vec<dummy::DummySerial>,
     },
     #[serde(
@@ -40,8 +42,10 @@ pub enum Config {
         sys: types::Sys,
         #[serde(default, alias = "gpios")]
         gpios: Vec<stm32f1xx::StmGpio>,
+        #[serde(default)]
         pwm: Vec<stm32f1xx::PWM>,
-        serial: Vec<stm32f1xx::Serial>,
+        #[serde(default)]
+        serial: Vec<stm32f1xx::StmSerial>,
     },
 }
 
@@ -52,10 +56,16 @@ impl Config {
             Config::Stm32f1xx { sys, .. } => sys,
         }
     }
-    pub fn gpios(&self) -> Vec<&dyn Gpio> {
+    pub fn gpios(&self) -> Vec<Box<dyn Gpio>> {
         match self {
-            Config::Dummy { gpios, .. } => gpios.iter().map(|gpio| gpio as &dyn Gpio).collect(),
-            Config::Stm32f1xx { gpios, .. } => gpios.iter().map(|gpio| gpio as &dyn Gpio).collect(),
+            Config::Dummy { gpios, .. } => gpios
+                .iter()
+                .map(|gpio| Box::new(*gpio) as Box<dyn Gpio>)
+                .collect(),
+            Config::Stm32f1xx { gpios, .. } => gpios
+                .iter()
+                .map(|gpio| Box::new(*gpio) as Box<dyn Gpio>)
+                .collect(),
         }
     }
     fn pwm(&self) -> Vec<&dyn PWMInterface> {
@@ -66,16 +76,14 @@ impl Config {
             }
         }
     }
-    fn serial(&self) -> Vec<&dyn SerialInterface> {
+    fn serials(&self) -> Vec<&dyn Serial> {
         match self {
-            Config::Dummy { serial, .. } => serial
-                .iter()
-                .map(|serial| serial as &dyn SerialInterface)
-                .collect(),
-            Config::Stm32f1xx { serial, .. } => serial
-                .iter()
-                .map(|serial| serial as &dyn SerialInterface)
-                .collect(),
+            Config::Dummy { serial, .. } => {
+                serial.iter().map(|serial| serial as &dyn Serial).collect()
+            }
+            Config::Stm32f1xx { serial, .. } => {
+                serial.iter().map(|serial| serial as &dyn Serial).collect()
+            }
         }
     }
     pub fn generator(&self) -> &dyn Generator {
@@ -85,6 +93,10 @@ impl Config {
         }
     }
     pub fn init_statements(&self) -> Vec<Stmt> {
+        let mut all_gpios: Vec<Box<dyn Gpio>> = self.gpios();
+        all_gpios.append(&mut self.pwm_gpios());
+        all_gpios.append(&mut self.serial_gpios());
+
         let code_gen = self.generator();
         let mut init_stmts = code_gen.generate_imports();
         init_stmts.append(&mut code_gen.generate_device_init());
@@ -92,25 +104,26 @@ impl Config {
             &mut code_gen
                 .generate_clock(&self.sys().sys_clock.as_ref().map(|f| Frequency::from(f))),
         );
-        init_stmts.append(&mut code_gen.generate_channels(&self.gpios()));
-        init_stmts.append(&mut code_gen.generate_gpios(&self.gpios()));
+        init_stmts.append(&mut code_gen.generate_channels(&all_gpios));
+        init_stmts.append(&mut code_gen.generate_gpios(&all_gpios));
         init_stmts.append(&mut code_gen.generate_pwm_pins(&self.pwm()));
+        init_stmts.append(&mut code_gen.generate_serials(&self.serials()));
         init_stmts
     }
     pub fn interrupt_unmasks(&self) -> Vec<Stmt> {
         self.generator().interrupts(&self.gpios())
     }
-    fn output_pins(&self) -> Vec<&dyn Gpio> {
-        let (out_pins, _in_pins): (Vec<&dyn Gpio>, Vec<&dyn Gpio>) = self
+    fn output_pins(&self) -> Vec<Box<dyn Gpio>> {
+        let (out_pins, _in_pins): (Vec<Box<dyn Gpio>>, Vec<Box<dyn Gpio>>) = self
             .gpios()
-            .iter()
+            .into_iter()
             .partition(|gpio| gpio.direction() == &Direction::Output);
         out_pins
     }
-    fn input_pins(&self) -> Vec<&dyn Gpio> {
-        let (_out_pins, in_pins): (Vec<&dyn Gpio>, Vec<&dyn Gpio>) = self
+    fn input_pins(&self) -> Vec<Box<dyn Gpio>> {
+        let (_out_pins, in_pins): (Vec<Box<dyn Gpio>>, Vec<Box<dyn Gpio>>) = self
             .gpios()
-            .iter()
+            .into_iter()
             .partition(|gpio| gpio.direction() == &Direction::Output);
         in_pins
     }
@@ -125,6 +138,16 @@ impl Config {
             .iter()
             .map(|gpio| gpio.pin().port_constructor())
             .collect()
+    }
+    pub fn input_constructors(&self) -> Vec<Expr> {
+        let channels = self.input_channels().into_iter();
+        let ports = self.input_ports().into_iter();
+        let idents = self.input_idents().into_iter();
+        let mut constructors = vec![];
+        for (channel, (port, ident)) in channels.zip(ports.zip(idents)) {
+            constructors.push(parse_quote!(InputPin::new(Pin::new(#channel, #port), #ident)));
+        }
+        constructors
     }
 
     pub fn output_channels(&self) -> Vec<Expr> {
@@ -157,6 +180,17 @@ impl Config {
     pub fn output_tys(&self) -> Vec<Type> {
         self.output_pins().iter().map(|gpio| gpio.ty()).collect()
     }
+    pub fn output_constructors(&self) -> Vec<Expr> {
+        let channels = self.output_channels().into_iter();
+        let ports = self.output_ports().into_iter();
+        let idents = self.output_idents().into_iter();
+        let mut constructors = vec![];
+        for (channel, (port, ident)) in channels.zip(ports.zip(idents)) {
+            constructors.push(parse_quote!(OutputPin::new(Pin::new(#channel, #port), #ident)));
+        }
+        constructors
+    }
+
     fn pwm_pins(&self) -> Vec<&dyn Pin> {
         self.pwm().iter().map(|pwm| pwm.pins()).flatten().collect()
     }
@@ -181,16 +215,50 @@ impl Config {
     pub fn pwm_tys(&self) -> Vec<Type> {
         self.pwm().iter().map(|pwm| pwm.tys()).flatten().collect()
     }
+    pub fn pwm_constructors(&self) -> Vec<Expr> {
+        let channels = self.pwm_channels().into_iter();
+        let ports = self.pwm_ports().into_iter();
+        let idents = self.pwm_idents().into_iter();
+        let mut constructors = vec![];
+        for (channel, (port, ident)) in channels.zip(ports.zip(idents)) {
+            constructors.push(parse_quote!(
+                   PWMPin::new(Pin::new(#channel , #port), #ident)
+            ))
+        }
+        constructors
+    }
+    fn pwm_gpios(&self) -> Vec<Box<dyn Gpio>> {
+        self.pwm()
+            .into_iter()
+            .map(|pwm| pwm.pins_as_gpios())
+            .fold(vec![], |mut res, mut next| {
+                res.append(&mut next);
+                res
+            })
+    }
+
     pub fn serial_rx_pins(&self) -> Vec<&dyn Pin> {
-        self.serial()
+        self.serials()
             .iter()
             .map(|serial| serial.receive_pin())
             .collect()
     }
     pub fn serial_tx_pins(&self) -> Vec<&dyn Pin> {
-        self.serial()
+        self.serials()
             .iter()
             .map(|serial| serial.transmit_pin())
+            .collect()
+    }
+    pub fn serial_idents(&self) -> Vec<Ident> {
+        self.serials()
+            .iter()
+            .map(|serial| format_ident!("{}", serial.name()))
+            .collect()
+    }
+    fn serial_gpios(&self) -> Vec<Box<dyn Gpio>> {
+        self.serials()
+            .into_iter()
+            .flat_map(|serial| vec![serial.reveceive_as_gpio(), serial.transmit_as_gpio()])
             .collect()
     }
 }

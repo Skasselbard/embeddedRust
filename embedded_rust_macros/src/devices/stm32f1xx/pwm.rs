@@ -1,9 +1,12 @@
-use super::{Generator, Pin, Timer};
-use crate::generation::PWMGeneration;
-use crate::types::{Frequency, PWMInterface, UnitHz};
+use super::{Generator, Pin, StmGpio, Timer};
+use crate::types::{Frequency, Gpio, PWMInterface, UnitHz};
+use crate::{
+    generation::PWMGeneration,
+    types::{Direction, PinMode},
+};
 use quote::format_ident;
 use serde_derive::Deserialize;
-use syn::{parse_quote, parse_str, Stmt};
+use syn::{parse_quote, parse_str, Ident, Stmt};
 
 /// ```
 /// "pwm":[{
@@ -51,42 +54,41 @@ impl PWMInterface for PWM {
         Frequency::from(&self.frequency)
     }
 
+    // expands to:
+    // ```
+    // let timer = Timer::timx(p.TIMX, &clocks, &mut rcc.apb);
+    // let (pwx, pyz) = timer.pwm((pwx, pyz), &mut afio.mapr, freq);
+    // ```
     fn generate(&self) -> Vec<Stmt> {
-        let mut stmts = vec![];
         let peripherals = peripherals_ident!();
         let timer = format_ident!("{}", self.timer.name());
         let timer_upper = format_ident!("{}", self.timer.name().to_uppercase());
         let timer_remap = format_ident!("{}", self.timer.remap(&self.pins));
         let apb = format_ident!("{}", self.timer.peripheral_bus());
         let frequency = Frequency::from(&self.frequency).0;
-        let mut pin_ids = vec![];
-        for pin in &self.pins {
-            use crate::types::Pin;
-            let channel = format_ident!("{}", pin.channel_name());
-            let pin_name = format_ident!("{}", pin.name());
-            let ctrl_reg = format_ident!(
-                "{}",
-                super::gpio::control_reg(pin as &dyn crate::types::Pin)
-            );
-            // expands to:
-            // ``let pxy = gpiox.pxy.into_alternate_push_pull(&mut gpiox.crl);``
-            stmts.append(&mut parse_quote!(
-                let #pin_name = #channel.#pin_name.into_alternate_push_pull(&mut #channel.#ctrl_reg);
-            ));
-            pin_ids.push(pin_name);
-        }
-        // expands to:
-        // ```
-        // let pwx = pwx.into_alternate_push_pull(&mut gpiow.crl);
-        // let pyz = gpioy.pyz.into_alternate_push_pull(&mut gpioy.crl);
-        // let timer = Timer::timx(p.TIMX, &clocks, &mut rcc.apb);
-        // let (pwx, pyz) = timer.pwm((pwx, pyz), &mut afio.mapr, freq);
-        // ```
-        stmts.append(&mut parse_quote!(
+        let pin_ids: Vec<Ident> = self
+            .pins()
+            .iter()
+            .map(|pin| format_ident!("{}", pin.name()))
+            .collect();
+        parse_quote!(
             let timer = Timer::#timer(#peripherals.#timer_upper, &clocks, &mut rcc.#apb);
             let (#(#pin_ids),*) = timer.pwm::<timer::#timer_remap, _, _, _>((#(#pin_ids),*), &mut afio.mapr, #frequency.hz()).split();
-        ));
-        stmts
+        )
+    }
+
+    fn pins_as_gpios(&self) -> Vec<Box<dyn crate::types::Gpio>> {
+        self.pins
+            .iter()
+            .map(|pin| {
+                Box::new(StmGpio::new(
+                    *pin,
+                    Direction::Alternate,
+                    PinMode::PushPull,
+                    None,
+                )) as Box<dyn Gpio>
+            })
+            .collect()
     }
 }
 

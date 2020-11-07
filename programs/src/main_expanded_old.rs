@@ -14,16 +14,15 @@ struct BluePill;
 impl BluePill {
     #[inline]
     fn init() {
-        use embedded_rust::device::{Channel, Port};
-        use embedded_rust::resources::Resource;
-        use embedded_rust::resources::{InputPin, OutputPin, PWMPin, Pin};
-        use embedded_rust::Runtime;
-        use stm32f1xx_hal::gpio::{self, Edge, ExtiPin};
-        use stm32f1xx_hal::pac;
         use stm32f1xx_hal::prelude::*;
-        use stm32f1xx_hal::pwm::{self, PwmChannel};
-        use stm32f1xx_hal::serial::{Config, Serial};
+        use stm32f1xx_hal::gpio::{self, Edge, ExtiPin};
         use stm32f1xx_hal::timer::{self, Timer};
+        use stm32f1xx_hal::pwm::{self, PwmChannel};
+        use stm32f1xx_hal::pac;
+        use embedded_rust::resources::{Pin, InputPin, OutputPin, PWMPin};
+        use embedded_rust::device::{Port, Channel};
+        use embedded_rust::resources::{Resource};
+        use embedded_rust::Runtime;
         let peripherals = stm32f1xx_hal::pac::Peripherals::take().unwrap();
         let mut flash = peripherals.FLASH.constrain();
         let mut rcc = peripherals.RCC.constrain();
@@ -33,77 +32,66 @@ impl BluePill {
         let mut afio = peripherals.AFIO.constrain(&mut rcc.apb2);
         let mut gpioa = peripherals.GPIOA.split(&mut rcc.apb2);
         let mut gpioc = peripherals.GPIOC.split(&mut rcc.apb2);
-        let mut gpiob = peripherals.GPIOB.split(&mut rcc.apb2);
-        let mut pa0 = gpioa.pa0.into_pull_up_input(&mut gpioa.crl);
-        pa0.make_interrupt_source(&mut afio);
-        pa0.trigger_on_edge(&peripherals.EXTI, Edge::FALLING);
-        pa0.enable_interrupt(&peripherals.EXTI);
-        let mut pc13 = gpioc.pc13.into_push_pull_output(&mut gpioc.crh);
-        let mut pa1 = gpioa.pa1.into_alternate_push_pull(&mut gpioa.crl);
-        let mut pb7 = gpiob.pb7.into_floating_input(&mut gpiob.crl);
-        let mut pb6 = gpiob.pb6.into_alternate_push_pull(&mut gpiob.crl);
+        let mut pin_pa0 = gpioa.pa0.into_pull_up_input(&mut gpioa.crl);
+        pin_pa0.make_interrupt_source(&mut afio);
+        pin_pa0.trigger_on_edge(&peripherals.EXTI, Edge::FALLING);
+        pin_pa0.enable_interrupt(&peripherals.EXTI);
+        let mut pin_pc13 = gpioc.pc13.into_push_pull_output(&mut gpioc.crh);
+        let pa1 = gpioa.pa1.into_alternate_push_pull(&mut gpioa.crl);
         let timer = Timer::tim2(peripherals.TIM2, &clocks, &mut rcc.apb1);
         let (pa1) = timer
             .pwm::<timer::Tim2NoRemap, _, _, _>((pa1), &mut afio.mapr, 10000u32.hz())
             .split();
-        let mut usart1 = Serial::usart1(
-            peripherals.USART1,
-            (pb6, pb7),
-            &mut afio.mapr,
-            Config::default().baudrate(9600u32.bps()),
-            clocks,
-            &mut rcc.apb2,
-        );
         static mut SYS: Option<()> = None;
-        static mut SYS_ARRAY: Option<[&'static mut dyn Resource; 0usize]> = None;
         static mut INPUT_PINS: Option<(InputPin<gpio::gpioa::PA0<gpio::Input<gpio::PullUp>>>,)> =
             None;
-        static mut INPUT_PINS_ARRAY: Option<[&'static mut dyn Resource; 1usize]> = None;
         static mut OUTPUT_PINS: Option<(
             OutputPin<gpio::gpioc::PC13<gpio::Output<gpio::PushPull>>>,
         )> = None;
-        static mut OUTPUT_PINS_ARRAY: Option<[&'static mut dyn Resource; 1usize]> = None;
         static mut PWM_PINS: Option<(PWMPin<PwmChannel<pac::TIM2, pwm::C2>>,)> = None;
-        static mut PWM_PINS_ARRAY: Option<[&'static mut dyn Resource; 1usize]> = None;
         static mut CHANNELS: Option<()> = None;
-        static mut CHANNELS_ARRAY: Option<[&'static mut dyn Resource; 0usize]> = None;
         static mut SERIALS: Option<()> = None;
-        static mut SERIALS_ARRAY: Option<[&'static mut dyn Resource; 0usize]> = None;
         static mut TIMERS: Option<()> = None;
-        static mut TIMERS_ARRAY: Option<[&'static mut dyn Resource; 0usize]> = None;
+        static mut SYS_ARRAY: Option<[&'static mut dyn Resource; 0usize]> = None;
+        static mut INPUT_ARRAY: Option<[&'static mut dyn Resource; 1usize]> = None;
+        static mut OUTPUT_ARRAY: Option<[&'static mut dyn Resource; 1usize]> = None;
+        static mut PWM_ARRAY: Option<[&'static mut dyn Resource; 1usize]> = None;
+        static mut CHANNEL_ARRAY: Option<[&'static mut dyn Resource; 0usize]> = None;
+        static mut SERIAL_ARRAY: Option<[&'static mut dyn Resource; 0usize]> = None;
+        static mut TIMER_ARRAY: Option<[&'static mut dyn Resource; 0usize]> = None;
         unsafe {
             SYS = Some(());
-            let sys = SYS.as_mut().unwrap();
-            SYS_ARRAY = Some([]);
-            INPUT_PINS = Some((InputPin::new(Pin::new(Channel::A, Port::P00), pa0),));
-            let input_pins = INPUT_PINS.as_mut().unwrap();
-            INPUT_PINS_ARRAY = Some([&mut input_pins.0]);
-            OUTPUT_PINS = Some((OutputPin::new(Pin::new(Channel::C, Port::P13), pc13),));
-            let output_pins = OUTPUT_PINS.as_mut().unwrap();
-            OUTPUT_PINS_ARRAY = Some([&mut output_pins.0]);
+            INPUT_PINS = Some((InputPin::new(Pin::new(Channel::A, Port::P00), pin_pa0),));
+            OUTPUT_PINS = Some((OutputPin::new(Pin::new(Channel::C, Port::P13), pin_pc13),));
             PWM_PINS = Some((PWMPin::new(Pin::new(Channel::A, Port::P01), pa1),));
-            let pwm_pins = PWM_PINS.as_mut().unwrap();
-            PWM_PINS_ARRAY = Some([&mut pwm_pins.0]);
             CHANNELS = Some(());
-            let channels = CHANNELS.as_mut().unwrap();
-            CHANNELS_ARRAY = Some([]);
             SERIALS = Some(());
-            let serials = SERIALS.as_mut().unwrap();
-            SERIALS_ARRAY = Some([]);
             TIMERS = Some(());
+            let sys = SYS.as_mut().unwrap();
+            let input_pins = INPUT_PINS.as_mut().unwrap();
+            let output_pins = OUTPUT_PINS.as_mut().unwrap();
+            let pwm = PWM_PINS.as_mut().unwrap();
+            let channels = CHANNELS.as_mut().unwrap();
+            let serials = SERIALS.as_mut().unwrap();
             let timers = TIMERS.as_mut().unwrap();
-            TIMERS_ARRAY = Some([]);
+            SYS_ARRAY = Some([]);
+            INPUT_ARRAY = Some([&mut input_pins.0]);
+            OUTPUT_ARRAY = Some([&mut output_pins.0]);
+            PWM_ARRAY = Some([&mut pwm.0]);
+            CHANNEL_ARRAY = Some([]);
+            SERIAL_ARRAY = Some([]);
+            TIMER_ARRAY = Some([]);
         }
         unsafe {
             Runtime::init(
                 10240usize,
                 SYS_ARRAY.as_mut().unwrap(),
-                INPUT_PINS_ARRAY.as_mut().unwrap(),
-                OUTPUT_PINS_ARRAY.as_mut().unwrap(),
-                PWM_PINS_ARRAY.as_mut().unwrap(),
-                CHANNELS_ARRAY.as_mut().unwrap(),
-                SERIALS_ARRAY.as_mut().unwrap(),
-                TIMERS_ARRAY.as_mut().unwrap(),
+                INPUT_ARRAY.as_mut().unwrap(),
+                OUTPUT_ARRAY.as_mut().unwrap(),
+                PWM_ARRAY.as_mut().unwrap(),
+                CHANNEL_ARRAY.as_mut().unwrap(),
+                SERIAL_ARRAY.as_mut().unwrap(),
+                TIMER_ARRAY.as_mut().unwrap(),
             )
             .expect("Runtime initialization failed");
         }
@@ -172,7 +160,7 @@ pub async fn test_task() {
     let mut button_events = BluePill::get_resource("event:gpio/pa0").unwrap();
     let mut led = BluePill::get_resource("digital:gpio/pc13").unwrap();
     let mut brightness = Brightness { level: Level::Off };
-    let mut pwm = BluePill::get_resource("percent:pwm/pa1").unwrap();
+    let mut pwm = BluePill::get_resource("analog:pwm/pa1").unwrap();
     pwm.write(&if false {
         brightness.next().to_be_bytes()
     } else {

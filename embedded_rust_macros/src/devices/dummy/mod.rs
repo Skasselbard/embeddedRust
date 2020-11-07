@@ -3,7 +3,7 @@
 //! the acces functions of the Config enum (the compiler will complain^^).
 //!
 //! Look at the trait documentation for more information what the functions are used for.
-use crate::types::SerialInterface;
+use crate::types::Serial;
 use crate::types::{self, Direction, Gpio, Pin, PinMode, TriggerEdge};
 use crate::{generation::*, types::Baud};
 use quote::format_ident;
@@ -76,7 +76,10 @@ impl DeviceGeneration for DummyGenerator {
     fn generate_device_init(&self) -> std::vec::Vec<syn::Stmt> {
         vec![]
     }
-    fn generate_channels(&self, _: &std::vec::Vec<&dyn types::Gpio>) -> std::vec::Vec<syn::Stmt> {
+    fn generate_channels(
+        &self,
+        _: &std::vec::Vec<Box<dyn types::Gpio>>,
+    ) -> std::vec::Vec<syn::Stmt> {
         vec![]
     }
 }
@@ -91,7 +94,10 @@ impl SysGeneration for DummyGenerator {
 }
 
 impl GpioGeneration for DummyGenerator {
-    fn generate_gpios(&self, gpios: &std::vec::Vec<&dyn types::Gpio>) -> std::vec::Vec<syn::Stmt> {
+    fn generate_gpios(
+        &self,
+        gpios: &std::vec::Vec<Box<dyn types::Gpio>>,
+    ) -> std::vec::Vec<syn::Stmt> {
         let mut stmts = Vec::new();
         for gpio in gpios {
             let pin_ident = gpio.identifier();
@@ -101,13 +107,25 @@ impl GpioGeneration for DummyGenerator {
         }
         stmts
     }
-    fn interrupts(&self, _: &std::vec::Vec<&dyn types::Gpio>) -> std::vec::Vec<syn::Stmt> {
+    fn interrupts(&self, _: &std::vec::Vec<Box<dyn types::Gpio>>) -> std::vec::Vec<syn::Stmt> {
         //TODO:
         vec![]
     }
 }
 
 impl PWMGeneration for DummyGenerator {}
+
+impl SerialGeneration for DummyGenerator {
+    fn pins_as_gpio(&self, serials: &Vec<&dyn Serial>) -> Vec<Box<dyn Gpio>> {
+        //TODO:
+        todo!()
+    }
+
+    fn generate_serials(&self, serials: &Vec<&dyn Serial>) -> Vec<syn::Stmt> {
+        // TODO:
+        todo!()
+    }
+}
 
 // This implementation should already fit most perposes if you
 // held on to the DummyGpio tuple struct example
@@ -125,7 +143,7 @@ impl Gpio for DummyGpio {
         self.3
     }
     fn identifier(&self) -> syn::Ident {
-        format_ident!("pin_{}", (self as &dyn types::Gpio).pin().name())
+        format_ident!("{}", (self as &dyn types::Gpio).pin().name())
     }
     fn ty(&self) -> syn::Type {
         syn::parse_str(&format!("()")).unwrap()
@@ -172,9 +190,13 @@ impl PWMInterface for DummyPWM {
     fn generate(&self) -> Vec<syn::Stmt> {
         vec![]
     }
+
+    fn pins_as_gpios(&self) -> Vec<Box<dyn Gpio>> {
+        todo!()
+    }
 }
 
-impl SerialInterface for DummySerial {
+impl Serial for DummySerial {
     fn receive_pin(&self) -> &dyn crate::types::Pin {
         &self.receive_pin
     }
@@ -185,5 +207,17 @@ impl SerialInterface for DummySerial {
 
     fn baud(&self) -> Baud {
         self.baudrate
+    }
+
+    fn reveceive_as_gpio(&self) -> Box<dyn Gpio> {
+        todo!()
+    }
+
+    fn transmit_as_gpio(&self) -> Box<dyn Gpio> {
+        todo!()
+    }
+
+    fn name(&self) -> String {
+        todo!()
     }
 }

@@ -24,7 +24,14 @@ use embedded_rust_macros::*;
                 "timer":    "Tim2", 
                 "pins":     ["PA1"], 
                 "frequency":[10,"khz"]
-            }]
+            }],
+            "serial":[
+                {"usart1":{
+                    "tx": "PB6",
+                    "rx": "PB7",
+                    "baud": 9600
+                }}
+            ]
         }
     })
 ]

@@ -261,4 +261,17 @@ impl Config {
             .flat_map(|serial| vec![serial.reveceive_as_gpio(), serial.transmit_as_gpio()])
             .collect()
     }
+    pub fn serial_tys(&self) -> Vec<Type> {
+        self.serials().iter().map(|serial| serial.ty()).collect()
+    }
+    pub fn serial_constructors(&self) -> Vec<Expr> {
+        let mut constructors = vec![];
+        for serial in self.serials() {
+            let ident = format_ident!("{}", serial.name());
+            constructors.push(parse_quote!(
+                   SerialPin::new(Serial::new(#ident))
+            ))
+        }
+        constructors
+    }
 }

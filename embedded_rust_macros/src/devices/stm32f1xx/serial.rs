@@ -5,7 +5,7 @@ use crate::{
 };
 use quote::format_ident;
 use serde_derive::Deserialize;
-use syn::{parse_quote, parse_str, Stmt};
+use syn::{Stmt, Type, parse_quote, parse_str};
 
 /// ```
 /// "Serial":[
@@ -95,6 +95,15 @@ impl Serial for StmSerial {
     fn name(&self) -> String {
         self.name()
     }
+
+    fn ty(&self) -> Type{
+        parse_str(&format!(
+            "Serial<{},<({}, {})>>",
+            self.name().to_uppercase(),
+            self.transmit_pin().to_type(),
+            self.receive_pin().to_type(),
+        )).unwrap()
+    }
 }
 
 impl SerialGeneration for super::Generator {
@@ -107,30 +116,6 @@ impl SerialGeneration for super::Generator {
         gpios
     }
     fn generate_serials(&self, serials: &Vec<&dyn Serial>) -> Vec<Stmt> {
-        // pub fn usart1(
-        //     usart: USART1,
-        //     pins: PINS,
-        //     mapr: &mut MAPR,
-        //     config: Config,
-        //     clocks: Clocks,
-        //     apb: &mut APB2
-        // ) -> Self
-        // pub fn usart2(
-        //     usart: USART2,
-        //     pins: PINS,
-        //     mapr: &mut MAPR,
-        //     config: Config,
-        //     clocks: Clocks,
-        //     apb: &mut APB1
-        // ) -> Self
-        // pub fn usart3(
-        //     usart: USART3,
-        //     pins: PINS,
-        //     mapr: &mut MAPR,
-        //     config: Config,
-        //     clocks: Clocks,
-        //     apb: &mut APB1
-        // ) -> Self
         let mut stmts = vec![];
         for serial in serials {
             let name = format_ident!("{}", serial.name());

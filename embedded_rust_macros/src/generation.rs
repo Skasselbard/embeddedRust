@@ -101,7 +101,7 @@ pub(crate) fn component_statics(config: &Config) -> Vec<Stmt> {
     ));
     stmts.append(&mut define_static!("PWM_PINS", "PWMPin", &config.pwm_tys()));
     stmts.append(&mut define_static!("CHANNELS", (), &vec![]));
-    stmts.append(&mut define_static!("SERIALS", (), &vec![]))
+    stmts.append(&mut define_static!("SERIALS", "Serial", &config.serial_tys()));
     stmts.append(&mut define_static!("TIMERS", (), &vec![]));
     stmts.into()
 }
@@ -142,7 +142,7 @@ pub(crate) fn static_init(config: &Config) -> ExprUnsafe {
         &config.pwm_constructors()
     ));
     inits.append(&mut init_static!("CHANNELS", &vec![], &vec![]));
-    inits.append(&mut init_static!("SERIALS", &vec![], &vec![]))
+    inits.append(&mut init_static!("SERIALS", &config.serial_idents(), &config.serial_constructors()));
     inits.append(&mut init_static!("TIMERS", &vec![], &vec![]));
 
     parse_quote!(

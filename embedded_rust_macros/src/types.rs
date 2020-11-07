@@ -14,6 +14,7 @@ pub trait Gpio {
     fn trigger_edge(&self) -> Option<TriggerEdge>;
     fn identifier(&self) -> Ident;
     fn ty(&self) -> Type;
+    fn generate(&self) -> Vec<syn::Stmt>;
 }
 
 pub trait PWMInterface {
@@ -30,9 +31,9 @@ pub trait Serial {
     fn transmit_pin(&self) -> &dyn Pin;
     fn reveceive_as_gpio(&self) -> Box<dyn Gpio>;
     fn transmit_as_gpio(&self) -> Box<dyn Gpio>;
-    // fn tys(&self) -> Vec<Type>;
+    fn ty(&self) -> Type;
     fn baud(&self) -> Baud;
-    // fn generate(&self) -> Vec<syn::Stmt>;
+    fn generate(&self) -> Vec<syn::Stmt>;
 }
 
 /// The trait that each device pin should implement. For a complex example impression

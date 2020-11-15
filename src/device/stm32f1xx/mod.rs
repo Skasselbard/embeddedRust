@@ -1,12 +1,13 @@
 #[macro_use]
-mod usart;
+mod serial;
 mod gpio;
 mod pwm;
 use crate::resources::gpio::Pin;
 use crate::resources::Resources;
+
 pub use gpio::*;
 pub use pwm::*;
-pub use usart::*;
+pub use serial::*;
 
 #[derive(Copy, Clone, PartialEq, Eq, Debug, Ord, PartialOrd)]
 pub enum ExtiEvent {

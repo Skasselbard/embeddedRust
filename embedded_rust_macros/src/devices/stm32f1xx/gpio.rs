@@ -51,6 +51,68 @@ impl types::Gpio for StmGpio {
             .unwrap()
         }
     }
+    /// expand:
+    /// ```
+    /// let mut pin_pxy = gpiox.pxy.into_smth(&mut gpiox.control_reg);
+    /// // if its an interrupt pin
+    /// pin_pxy.make_interrupt_source(&mut afio);
+    /// pin_pxy.trigger_on_edge(&peripherals.EXTI, Edge::EDGE_TYPE);
+    /// pin_pxy.enable_interrupt(&peripherals.EXTI);
+    /// ```
+    fn generate(&self) -> Vec<Stmt> {
+        // build identifiers
+        let pin_name = format_ident!("{}", self.pin().name());
+        let pin_var_ident = self.identifier();
+        let channel_ident = format_ident!("{}", self.pin().channel_name());
+        // the name of the gpio functions has no global pattern for all configurations
+        // so we need to check the gpio configuration again
+        let init_function_ident = if self.mode() == &PinMode::Analog {
+            format_ident!("into_analog")
+        } else {
+            match self.direction() {
+                Direction::Input | Direction::Output => format_ident!(
+                    "into_{}_{}",
+                    self.mode().to_string(),
+                    self.direction().to_type_string().to_lowercase()
+                ),
+                Direction::Alternate => format_ident!(
+                    "into_{}_{}",
+                    self.direction().to_type_string().to_lowercase(),
+                    self.mode().to_string(),
+                ),
+            }
+        };
+        let control_reg_ident = format_ident!("{}", control_reg(self.pin()));
+        // expand: let mut pin_pxy = gpiox.pxy.into_smth(&mut gpiox.control_reg);
+        let mut stmts: Vec<Stmt> = parse_quote!(
+            let mut #pin_var_ident = #channel_ident.#pin_name.#init_function_ident(&mut #channel_ident.#control_reg_ident);
+        );
+        // if the pin shall be an interrupt source, we need additional configuration
+        match self.direction() {
+            Direction::Input => {
+                if let Some(edge) = self.trigger_edge() {
+                    let peripherals_ident = peripherals_ident!();
+                    let edge_ident = match edge {
+                        TriggerEdge::Rising => format_ident!("RISING"),
+                        TriggerEdge::Falling => format_ident!("FALLING"),
+                        TriggerEdge::All => format_ident!("RISING_FALLING"),
+                    };
+                    // expand:
+                    // pin_pxy.make_interrupt_source(&mut afio);
+                    // pin_pxy.trigger_on_edge(&peripherals.EXTI, Edge::EDGE_TYPE);
+                    // pin_pxy.enable_interrupt(&peripherals.EXTI);
+                    let mut interrupt_stmts: Vec<Stmt> = parse_quote!(
+                        #pin_var_ident.make_interrupt_source(&mut afio);
+                        #pin_var_ident.trigger_on_edge(&#peripherals_ident.EXTI, Edge::#edge_ident);
+                        #pin_var_ident.enable_interrupt(&#peripherals_ident.EXTI);
+                    );
+                    stmts.append(&mut interrupt_stmts);
+                }
+            }
+            _ => {}
+        }
+        stmts
+    }
 }
 
 impl StmGpio {
@@ -99,13 +161,6 @@ pub fn control_reg(pin: &dyn crate::types::Pin) -> String {
 }
 
 impl GpioGeneration for super::Generator {
-    fn generate_gpios(&self, gpios: &Vec<Box<dyn Gpio>>) -> Vec<Stmt> {
-        let mut stmts = Vec::new();
-        for gpio in gpios {
-            stmts.append(&mut generate_gpio(gpio.as_ref()));
-        }
-        stmts
-    }
     fn interrupts(&self, gpios: &Vec<Box<dyn Gpio>>) -> Vec<Stmt> {
         let mut stmts = Vec::new();
         for gpio in gpios {
@@ -159,68 +214,6 @@ pub(crate) fn channel_init_statements(gpio_list: &Vec<Box<dyn Gpio>>) -> Vec<Stm
     stmts
 }
 
-/// expand:
-/// ```
-/// let mut pin_pxy = gpiox.pxy.into_smth(&mut gpiox.control_reg);
-/// // if its an interrupt pin
-/// pin_pxy.make_interrupt_source(&mut afio);
-/// pin_pxy.trigger_on_edge(&peripherals.EXTI, Edge::EDGE_TYPE);
-/// pin_pxy.enable_interrupt(&peripherals.EXTI);
-/// ```
-pub(crate) fn generate_gpio(gpio: &dyn Gpio) -> Vec<Stmt> {
-    // build identifiers
-    let pin_name = format_ident!("{}", gpio.pin().name());
-    let pin_var_ident = gpio.identifier();
-    let channel_ident = format_ident!("{}", gpio.pin().channel_name());
-    // the name of the gpio functions has no global pattern for all configurations
-    // so we need to check the gpio configuration again
-    let init_function_ident = if gpio.mode() == &PinMode::Analog {
-        format_ident!("into_analog")
-    } else {
-        match gpio.direction() {
-            Direction::Input | Direction::Output => format_ident!(
-                "into_{}_{}",
-                gpio.mode().to_string(),
-                gpio.direction().to_type_string().to_lowercase()
-            ),
-            Direction::Alternate => format_ident!(
-                "into_{}_{}",
-                gpio.direction().to_type_string().to_lowercase(),
-                gpio.mode().to_string(),
-            ),
-        }
-    };
-    let control_reg_ident = format_ident!("{}", control_reg(gpio.pin()));
-    // expand: let mut pin_pxy = gpiox.pxy.into_smth(&mut gpiox.control_reg);
-    let mut stmts: Vec<Stmt> = parse_quote!(
-        let mut #pin_var_ident = #channel_ident.#pin_name.#init_function_ident(&mut #channel_ident.#control_reg_ident);
-    );
-    // if the pin shall be an interrupt source, we need additional configuration
-    match gpio.direction() {
-        Direction::Input => {
-            if let Some(edge) = gpio.trigger_edge() {
-                let peripherals_ident = peripherals_ident!();
-                let edge_ident = match edge {
-                    TriggerEdge::Rising => format_ident!("RISING"),
-                    TriggerEdge::Falling => format_ident!("FALLING"),
-                    TriggerEdge::All => format_ident!("RISING_FALLING"),
-                };
-                // expand:
-                // pin_pxy.make_interrupt_source(&mut afio);
-                // pin_pxy.trigger_on_edge(&peripherals.EXTI, Edge::EDGE_TYPE);
-                // pin_pxy.enable_interrupt(&peripherals.EXTI);
-                let mut interrupt_stmts: Vec<Stmt> = parse_quote!(
-                    #pin_var_ident.make_interrupt_source(&mut afio);
-                    #pin_var_ident.trigger_on_edge(&#peripherals_ident.EXTI, Edge::#edge_ident);
-                    #pin_var_ident.enable_interrupt(&#peripherals_ident.EXTI);
-                );
-                stmts.append(&mut interrupt_stmts);
-            }
-        }
-        _ => {}
-    }
-    stmts
-}
 /// Pin ID
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Deserialize)]
 pub enum Pin {

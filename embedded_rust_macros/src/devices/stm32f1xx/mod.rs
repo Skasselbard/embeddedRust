@@ -15,7 +15,7 @@ use crate::generation::{self, DeviceGeneration, SysGeneration};
 use crate::types::{Frequency, Gpio};
 use quote::format_ident;
 use serde_derive::Deserialize;
-use syn::{parse_quote, parse_str, Stmt};
+use syn::{parse_quote, Stmt};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Deserialize)]
 pub enum Timer {
@@ -130,10 +130,9 @@ impl DeviceGeneration for Generator {
             use stm32f1xx_hal::timer::{self, Timer};
             use stm32f1xx_hal::pwm::{self, PwmChannel};
             use stm32f1xx_hal::pac;
-            use stm32f1xx_hal::serial::{Serial, Config};
-            use embedded_rust::resources::{Pin, InputPin, OutputPin, PWMPin};
-            use embedded_rust::device::{Port, Channel};
-            use embedded_rust::resources::{Resource};
+            use stm32f1xx_hal::serial::{self, Config};
+            use embedded_rust::resources::{Resource, Pin, InputPin, OutputPin, PWMPin, Serial};
+            use embedded_rust::device::{Port, Channel, SerialID};
             use embedded_rust::Runtime;
         )
     }

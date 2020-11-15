@@ -10,8 +10,7 @@ use stm32f1xx as dev;
 pub type ExtiEvent = dev::ExtiEvent;
 pub type Channel = dev::Channel;
 pub type Port = dev::Port;
-
-/// Pin ID
+pub type SerialID = dev::SerialID;
 
 /// Should return the start of the heap allocation
 /// In stm32f1 it startts at the data segment .uninit after .bss

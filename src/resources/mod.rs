@@ -10,11 +10,13 @@ use crate::{
     Runtime,
 };
 use core::task::{Context, Poll};
-pub use gpio::{InputPin, OutputPin, Pin};
 use nom_uri::Uri;
 use path::{IndexedPath, RawPath, ResourceMode};
 use pwm::PWMMode;
+
+pub use gpio::{InputPin, OutputPin, Pin};
 pub use pwm::PWMPin;
+pub use serial::Serial;
 pub use sys::SysResource;
 
 #[non_exhaustive]

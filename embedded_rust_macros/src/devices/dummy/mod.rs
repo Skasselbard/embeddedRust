@@ -94,19 +94,6 @@ impl SysGeneration for DummyGenerator {
 }
 
 impl GpioGeneration for DummyGenerator {
-    fn generate_gpios(
-        &self,
-        gpios: &std::vec::Vec<Box<dyn types::Gpio>>,
-    ) -> std::vec::Vec<syn::Stmt> {
-        let mut stmts = Vec::new();
-        for gpio in gpios {
-            let pin_ident = gpio.identifier();
-            stmts.append(&mut syn::parse_quote!(
-                let #pin_ident = ();
-            ));
-        }
-        stmts
-    }
     fn interrupts(&self, _: &std::vec::Vec<Box<dyn types::Gpio>>) -> std::vec::Vec<syn::Stmt> {
         //TODO:
         vec![]
@@ -116,12 +103,7 @@ impl GpioGeneration for DummyGenerator {
 impl PWMGeneration for DummyGenerator {}
 
 impl SerialGeneration for DummyGenerator {
-    fn pins_as_gpio(&self, serials: &Vec<&dyn Serial>) -> Vec<Box<dyn Gpio>> {
-        //TODO:
-        todo!()
-    }
-
-    fn generate_serials(&self, serials: &Vec<&dyn Serial>) -> Vec<syn::Stmt> {
+    fn generate_serials(&self, _serials: &Vec<&dyn Serial>) -> Vec<syn::Stmt> {
         // TODO:
         todo!()
     }
@@ -147,6 +129,13 @@ impl Gpio for DummyGpio {
     }
     fn ty(&self) -> syn::Type {
         syn::parse_str(&format!("()")).unwrap()
+    }
+
+    fn generate(&self) -> Vec<syn::Stmt> {
+        let pin_ident = self.identifier();
+        syn::parse_quote!(
+            let #pin_ident = ();
+        )
     }
 }
 
@@ -209,15 +198,27 @@ impl Serial for DummySerial {
         self.baudrate
     }
 
-    fn reveceive_as_gpio(&self) -> Box<dyn Gpio> {
-        todo!()
-    }
-
-    fn transmit_as_gpio(&self) -> Box<dyn Gpio> {
-        todo!()
-    }
-
     fn name(&self) -> String {
+        todo!()
+    }
+
+    fn ty(&self) -> syn::Type {
+        todo!()
+    }
+
+    fn generate(&self) -> Vec<syn::Stmt> {
+        todo!()
+    }
+
+    fn pins_as_gpio(&self) -> Vec<Box<dyn Gpio>> {
+        todo!()
+    }
+
+    fn word_ty(&self) -> syn::Type {
+        todo!()
+    }
+
+    fn serial_id(&self) -> String {
         todo!()
     }
 }

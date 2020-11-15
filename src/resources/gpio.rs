@@ -15,6 +15,7 @@ pub struct Pin {
     port: Port,
 }
 impl Pin {
+    // FIXME: from string is device dependent and should be moved
     #[inline]
     pub fn from_str(pin: &str) -> Result<Self, ResourceError> {
         let channel = match pin {

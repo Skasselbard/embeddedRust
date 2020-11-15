@@ -6,7 +6,7 @@ mod types;
 use config::Config;
 use proc_macro::TokenStream;
 use quote::quote;
-use syn::{parse_macro_input, parse_quote, parse_str, Expr, ExprUnsafe, ItemStruct, Stmt, Type};
+use syn::{parse_macro_input, ItemStruct};
 use types::*;
 
 #[proc_macro_attribute]

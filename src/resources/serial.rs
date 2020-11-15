@@ -1,5 +1,5 @@
 use super::{path::RawPath, Resource, ResourceMode};
-use crate::{io, schemes::Scheme};
+use crate::{device::SerialID, io, schemes::Scheme};
 use core::{
     marker::PhantomData,
     task::{Context, Poll},
@@ -11,17 +11,16 @@ use io::SeekFrom;
 /// End Of Transmission
 // const EOT: u8 = 4;
 
-pub struct Serial<HalSerial, Word> {
-    //id: Pin,
+pub struct Serial<HalSerial, WordType> {
+    id: SerialID,
     resource: HalSerial,
-    _phantom_word: PhantomData<Word>,
+    _phantom_word: PhantomData<WordType>,
 }
 
-impl<HalSerial, Word, Error> Resource for Serial<HalSerial, Word>
+impl<HalSerial, WordType, ReadError, WriteError> Resource for Serial<HalSerial, WordType>
 where
-    HalSerial: embedded_hal::serial::Read<Word, Error = Error>
-        + embedded_hal::serial::Write<Word, Error = Error>,
-    Error: core::fmt::Display,
+    HalSerial: embedded_hal::serial::Read<WordType, Error = ReadError>
+        + embedded_hal::serial::Write<WordType, Error = WriteError>,
 {
     fn poll_read(
         &mut self,
@@ -30,6 +29,7 @@ where
         mode: ResourceMode,
         buf: &mut [u8],
     ) -> Poll<Result<usize, io::Error>> {
+        //TODO: use scheme
         if let ResourceMode::Default = mode {
             let read_length = buf.len() % Self::WORD_SIZE;
             for i in 0..read_length {
@@ -38,16 +38,15 @@ where
                     Err(nb::Error::WouldBlock) => {
                         return Poll::Pending;
                     }
-                    Err(nb::Error::Other(e)) => {
-                        log::error!("Serial Error: {}", e);
+                    Err(nb::Error::Other(_)) => {
                         return Poll::Ready(Err(io::Error::Other));
                     }
                 };
                 unsafe {
                     // copy data into buffer
-                    core::intrinsics::write_bytes::<Word>(
-                        buf[i * Self::WORD_SIZE] as *mut Word,
-                        *(&mut word as *mut Word as *mut u8),
+                    core::intrinsics::write_bytes::<WordType>(
+                        buf[i * Self::WORD_SIZE] as *mut WordType,
+                        *(&mut word as *mut WordType as *mut u8),
                         Self::WORD_SIZE,
                     );
                 }
@@ -64,14 +63,15 @@ where
         mode: ResourceMode,
         buf: &'a [u8],
     ) -> Poll<Result<usize, io::Error>> {
+        //TODO: use scheme
         if let ResourceMode::Default = mode {
             let write_length = buf.len() % Self::WORD_SIZE;
             for i in 0..write_length {
-                let mut word = unsafe { core::mem::zeroed::<Word>() };
+                let mut word = unsafe { core::mem::zeroed::<WordType>() };
                 unsafe {
                     // copy data from buffer
-                    core::intrinsics::write_bytes::<Word>(
-                        &mut word as *mut Word,
+                    core::intrinsics::write_bytes::<WordType>(
+                        &mut word as *mut WordType,
                         *(&buf[i * Self::WORD_SIZE] as *const u8),
                         Self::WORD_SIZE,
                     );
@@ -81,8 +81,7 @@ where
                     Err(nb::Error::WouldBlock) => {
                         return Poll::Pending;
                     }
-                    Err(nb::Error::Other(e)) => {
-                        log::error!("Serial Error: {}", e);
+                    Err(nb::Error::Other(_)) => {
                         return Poll::Ready(Err(io::Error::Other));
                     }
                 };
@@ -98,11 +97,12 @@ where
         _scheme: Scheme,
         mode: ResourceMode,
     ) -> Poll<Result<(), io::Error>> {
+        //TODO: use scheme
         if let ResourceMode::Default = mode {
             match self.resource.flush() {
                 Ok(_) => Poll::Ready(Ok(())),
                 Err(nb::Error::WouldBlock) => Poll::Pending,
-                Err(nb::Error::Other(e)) => Poll::Ready(Err(io::Error::Other)),
+                Err(nb::Error::Other(_)) => Poll::Ready(Err(io::Error::Other)),
             }
         } else {
             Poll::Ready(Err(io::Error::InvalidInput))
@@ -126,18 +126,20 @@ where
         Poll::Ready(Err(io::Error::AddrNotAvailable))
     }
     fn path(&self) -> RawPath {
-        unimplemented!()
-        // RawPath::Serial(self.id, PWMMode::Default)
+        RawPath::Serial(self.id)
     }
     fn handle_event(&mut self) {}
 }
-impl<HalSerial, Word> Serial<HalSerial, Word>
+
+impl<HalSerial, WordType, ReadError, WriteError> Serial<HalSerial, WordType>
 where
-    HalSerial: embedded_hal::serial::Read<Word> + embedded_hal::serial::Write<Word>,
+    HalSerial: embedded_hal::serial::Read<WordType, Error = ReadError>
+        + embedded_hal::serial::Write<WordType, Error = WriteError>,
 {
-    const WORD_SIZE: usize = core::mem::size_of::<Word>();
-    pub fn new(hal_serial: HalSerial) -> Self {
+    const WORD_SIZE: usize = core::mem::size_of::<WordType>();
+    pub fn new(serial_id: SerialID, hal_serial: HalSerial) -> Self {
         Self {
+            id: serial_id,
             resource: hal_serial,
             _phantom_word: PhantomData,
         }

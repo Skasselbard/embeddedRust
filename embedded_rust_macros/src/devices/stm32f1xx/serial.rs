@@ -5,7 +5,9 @@ use crate::{
 };
 use quote::format_ident;
 use serde_derive::Deserialize;
-use syn::{Stmt, Type, parse_quote, parse_str};
+use syn::{parse_quote, parse_str, Stmt, Type};
+
+impl SerialGeneration for Generator {}
 
 /// ```
 /// "Serial":[
@@ -59,21 +61,6 @@ impl StmSerial {
             // StmSerial::USART5(_) => String::from("usart5"),
         }
     }
-}
-
-impl Serial for StmSerial {
-    fn receive_pin(&self) -> &dyn crate::types::Pin {
-        &self.inner().receive_pin
-    }
-
-    fn transmit_pin(&self) -> &dyn crate::types::Pin {
-        &self.inner().transmit_pin
-    }
-
-    fn baud(&self) -> Baud {
-        self.inner().baudrate
-    }
-
     fn reveceive_as_gpio(&self) -> Box<dyn crate::types::Gpio> {
         Box::new(StmGpio::new(
             self.inner().receive_pin,
@@ -91,56 +78,67 @@ impl Serial for StmSerial {
             None, //TODO
         ))
     }
+}
 
+impl Serial for StmSerial {
+    fn receive_pin(&self) -> &dyn crate::types::Pin {
+        &self.inner().receive_pin
+    }
+    fn transmit_pin(&self) -> &dyn crate::types::Pin {
+        &self.inner().transmit_pin
+    }
+    fn baud(&self) -> Baud {
+        self.inner().baudrate
+    }
     fn name(&self) -> String {
         self.name()
     }
-
-    fn ty(&self) -> Type{
-        parse_str(&format!(
-            "Serial<{},<({}, {})>>",
-            self.name().to_uppercase(),
-            self.transmit_pin().to_type(),
-            self.receive_pin().to_type(),
-        )).unwrap()
+    fn pins_as_gpio(&self) -> Vec<Box<dyn crate::types::Gpio>> {
+        vec![self.reveceive_as_gpio(), self.transmit_as_gpio()]
     }
-}
-
-impl SerialGeneration for super::Generator {
-    fn pins_as_gpio(&self, serials: &Vec<&dyn Serial>) -> Vec<Box<dyn crate::types::Gpio>> {
-        let mut gpios = vec![];
-        for serial in serials {
-            gpios.push(serial.reveceive_as_gpio());
-            gpios.push(serial.transmit_as_gpio());
-        }
-        gpios
+    fn ty(&self) -> Type {
+        let name = format_ident!("{}", self.name().to_uppercase());
+        let tx_ty = self.transmit_as_gpio().ty();
+        let rx_ty = self.reveceive_as_gpio().ty();
+        parse_quote!(
+            serial::Serial<pac::#name, (#tx_ty, #rx_ty)>
+        )
+        // parse_quote!((#tx_ty, #rx_ty))
     }
-    fn generate_serials(&self, serials: &Vec<&dyn Serial>) -> Vec<Stmt> {
-        let mut stmts = vec![];
-        for serial in serials {
-            let name = format_ident!("{}", serial.name());
-            let name_upper = format_ident!("{}", serial.name().to_uppercase());
-            let tx = format_ident!("{}", serial.transmit_pin().name());
-            let rx = format_ident!("{}", serial.receive_pin().name());
-            let peripherals = peripherals_ident!();
-            let baud = serial.baud().0;
-            let ap_bus = match serial.name().as_str() {
-                "usart1" => format_ident!("{}", "apb2"),
-                "usart2" => format_ident!("{}", "apb1"),
-                "usart3" => format_ident!("{}", "apb1"),
-                _ => unreachable!(),
-            };
-            stmts.append(&mut parse_quote!(
-                let mut #name = Serial::#name(
-                    #peripherals.#name_upper,
-                    (#tx, #rx),
-                    &mut afio.mapr,
-                    Config::default().baudrate(#baud.bps()),
-                    clocks,
-                    &mut rcc.#ap_bus
-                );
-            ))
+    fn generate(&self) -> Vec<Stmt> {
+        let name = format_ident!("{}", self.name());
+        let name_upper = format_ident!("{}", self.name().to_uppercase());
+        let tx = format_ident!("{}", self.transmit_pin().name());
+        let rx = format_ident!("{}", self.receive_pin().name());
+        let peripherals = peripherals_ident!();
+        let baud = self.baud().0;
+        let ap_bus = match self.name().as_str() {
+            "usart1" => format_ident!("{}", "apb2"),
+            "usart2" => format_ident!("{}", "apb1"),
+            "usart3" => format_ident!("{}", "apb1"),
+            _ => unreachable!(),
+        };
+        parse_quote!(
+            let mut #name = serial::Serial::#name(
+                #peripherals.#name_upper,
+                (#tx, #rx),
+                &mut afio.mapr,
+                Config::default().baudrate(#baud.bps()),
+                clocks,
+                &mut rcc.#ap_bus
+            );
+        )
+    }
+
+    fn word_ty(&self) -> Type {
+        parse_str("u8").unwrap()
+    }
+
+    fn serial_id(&self) -> String {
+        match self {
+            StmSerial::USART1(_) => "Usart1".into(),
+            StmSerial::USART2(_) => "Usart2".into(),
+            StmSerial::USART3(_) => "Usart3".into(),
         }
-        stmts
     }
 }

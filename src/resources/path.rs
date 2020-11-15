@@ -1,6 +1,7 @@
 use crate::Runtime;
 
 use super::{gpio::Pin, pwm::PWMMode, sys::SysPaths, ResourceError};
+use crate::device::SerialID;
 
 #[derive(Copy, Clone, Eq, Debug, Hash)]
 pub enum RawPath {
@@ -8,7 +9,7 @@ pub enum RawPath {
     Gpio(Pin),
     PWM(Pin, PWMMode),
     ADCPin(()),
-    Serial(()),
+    Serial(SerialID),
     Timer(()),
     Generic(()),
 }
@@ -16,9 +17,9 @@ pub enum RawPath {
 impl PartialEq for RawPath {
     fn eq(&self, other: &Self) -> bool {
         match self {
-            RawPath::Sys(pin) => {
-                if let RawPath::Sys(o_pin) = other {
-                    if pin == o_pin {
+            RawPath::Sys(path) => {
+                if let RawPath::Sys(o_path) = other {
+                    if path == o_path {
                         return true;
                     }
                 }
@@ -44,9 +45,9 @@ impl PartialEq for RawPath {
                     }
                 }
             }
-            RawPath::Serial(pin) => {
-                if let RawPath::Serial(o_pin) = other {
-                    if pin == o_pin {
+            RawPath::Serial(id) => {
+                if let RawPath::Serial(o_id) = other {
+                    if id == o_id {
                         return true;
                     }
                 }
@@ -102,6 +103,9 @@ impl RawPath {
             Some("sys") => Ok(RawPath::Sys(SysPaths::from_str(
                 segments.next().ok_or(ResourceError::ConversionError)?,
             )?)),
+            Some("serial") => Ok(RawPath::Serial(SerialID::from_str(
+                segments.next().ok_or(ResourceError::ConversionError)?,
+            )?)),
             _ => Err(ResourceError::NotFound),
         }
     }
@@ -128,19 +132,19 @@ impl RawPath {
                 IndexedPath::PWM(resources.search_resource_array(&self, resources.pwm)?),
                 ResourceMode::PWM(mode),
             )),
-            RawPath::ADCPin(_) => Ok((
+            RawPath::ADCPin(()) => Ok((
                 IndexedPath::ADCPin(resources.search_resource_array(&self, resources.channels)?),
                 ResourceMode::Default,
             )),
-            RawPath::Serial(_) => Ok((
+            RawPath::Serial(id) => Ok((
                 IndexedPath::Serial(resources.search_resource_array(&self, resources.serials)?),
                 ResourceMode::Default,
             )),
-            RawPath::Timer(_) => Ok((
+            RawPath::Timer(()) => Ok((
                 IndexedPath::Timer(resources.search_resource_array(&self, resources.timers)?),
                 ResourceMode::Default,
             )),
-            RawPath::Generic(_) => {
+            RawPath::Generic(()) => {
                 // Scheme::Event => self
                 //     .search_virtual_resources(&parsed_uri)
                 //     .map(|id| IndexedPath::Generic(id))

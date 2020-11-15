@@ -258,18 +258,25 @@ impl Config {
     fn serial_gpios(&self) -> Vec<Box<dyn Gpio>> {
         self.serials()
             .into_iter()
-            .flat_map(|serial| vec![serial.reveceive_as_gpio(), serial.transmit_as_gpio()])
+            .flat_map(|serial| serial.pins_as_gpio())
             .collect()
     }
     pub fn serial_tys(&self) -> Vec<Type> {
         self.serials().iter().map(|serial| serial.ty()).collect()
     }
+    pub fn serial_word_tys(&self) -> Vec<Type> {
+        self.serials()
+            .iter()
+            .map(|serial| serial.word_ty())
+            .collect()
+    }
     pub fn serial_constructors(&self) -> Vec<Expr> {
         let mut constructors = vec![];
         for serial in self.serials() {
             let ident = format_ident!("{}", serial.name());
+            let serial_id = format_ident!("{}", serial.serial_id());
             constructors.push(parse_quote!(
-                   SerialPin::new(Serial::new(#ident))
+                   Serial::new(SerialID::#serial_id, #ident)
             ))
         }
         constructors

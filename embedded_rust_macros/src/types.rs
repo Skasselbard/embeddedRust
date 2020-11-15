@@ -12,6 +12,7 @@ pub trait Gpio {
     fn direction(&self) -> &Direction;
     fn mode(&self) -> &PinMode;
     fn trigger_edge(&self) -> Option<TriggerEdge>;
+    // TODO: this might be useful for all traits
     fn identifier(&self) -> Ident;
     fn ty(&self) -> Type;
     fn generate(&self) -> Vec<syn::Stmt>;
@@ -27,11 +28,12 @@ pub trait PWMInterface {
 
 pub trait Serial {
     fn name(&self) -> String;
+    fn serial_id(&self) -> String;
     fn receive_pin(&self) -> &dyn Pin;
     fn transmit_pin(&self) -> &dyn Pin;
-    fn reveceive_as_gpio(&self) -> Box<dyn Gpio>;
-    fn transmit_as_gpio(&self) -> Box<dyn Gpio>;
+    fn pins_as_gpio(&self) -> Vec<Box<dyn crate::types::Gpio>>;
     fn ty(&self) -> Type;
+    fn word_ty(&self) -> Type;
     fn baud(&self) -> Baud;
     fn generate(&self) -> Vec<syn::Stmt>;
 }

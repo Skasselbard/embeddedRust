@@ -16,6 +16,7 @@ embedded-hal = {version = "0.2.4"}
 embedded_rust = {path = "../"}
 embedded_rust_macros = {path = "../embedded_rust_macros"}
 futures = {version = "0.3.5", default-features = false}
+log = "0.4.11"
 stm32f1xx-hal = {version = "0.6.1", features = ["stm32f103", "rt", "medium"]}
 
 [[bin]]

@@ -111,7 +111,11 @@ impl Config {
         init_stmts
     }
     pub fn interrupt_unmasks(&self) -> Vec<Stmt> {
-        self.generator().interrupts(&self.gpios())
+        let mut stmts = self.generator().interrupts(&self.gpios());
+        self.serials()
+            .into_iter()
+            .for_each(|serial| stmts.push(serial.generate_enable_interrupt()));
+        stmts
     }
     fn output_pins(&self) -> Vec<Box<dyn Gpio>> {
         let (out_pins, _in_pins): (Vec<Box<dyn Gpio>>, Vec<Box<dyn Gpio>>) = self
@@ -261,8 +265,14 @@ impl Config {
             .flat_map(|serial| serial.pins_as_gpio())
             .collect()
     }
-    pub fn serial_tys(&self) -> Vec<Type> {
-        self.serials().iter().map(|serial| serial.ty()).collect()
+    pub fn serial_tx_tys(&self) -> Vec<Type> {
+        self.serials().iter().map(|serial| serial.tx_ty()).collect()
+    }
+    pub fn serial_read_err_tys(&self) -> Vec<Type> {
+        self.serials()
+            .iter()
+            .map(|serial| serial.read_err_ty())
+            .collect()
     }
     pub fn serial_word_tys(&self) -> Vec<Type> {
         self.serials()
@@ -273,10 +283,11 @@ impl Config {
     pub fn serial_constructors(&self) -> Vec<Expr> {
         let mut constructors = vec![];
         for serial in self.serials() {
-            let ident = format_ident!("{}", serial.name());
+            let tx_channel = format_ident!("{}_tx", serial.name());
+            let rx_channel = format_ident!("{}_rx", serial.name());
             let serial_id = format_ident!("{}", serial.serial_id());
             constructors.push(parse_quote!(
-                   Serial::new(SerialID::#serial_id, #ident)
+                   Serial::new(SerialID::#serial_id, #tx_channel, #rx_channel)
             ))
         }
         constructors

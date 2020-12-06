@@ -32,6 +32,7 @@ pub fn handle_exti_event(event: &ExtiEvent) {
     }
 }
 
+// TODO: use cortex_m_rt::heap_start instead
 /// The heap starts after the data segments of static values (.data and .bss)
 /// #[link_section] places the annotated static directly at the given data segment.
 /// We can use the adress of this static to determine the start of the heap

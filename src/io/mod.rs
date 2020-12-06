@@ -229,7 +229,7 @@ pub enum Error {
     /// use elsewhere.
     AddrInUse,
     /// A nonexistent interface was requested or the requested address was not
-    /// local.
+    /// initialized.
     AddrNotAvailable,
     /// The operation failed because a pipe was closed.
     BrokenPipe,

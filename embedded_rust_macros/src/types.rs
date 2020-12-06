@@ -32,10 +32,12 @@ pub trait Serial {
     fn receive_pin(&self) -> &dyn Pin;
     fn transmit_pin(&self) -> &dyn Pin;
     fn pins_as_gpio(&self) -> Vec<Box<dyn crate::types::Gpio>>;
-    fn ty(&self) -> Type;
+    fn tx_ty(&self) -> Type;
+    fn read_err_ty(&self) -> Type;
     fn word_ty(&self) -> Type;
     fn baud(&self) -> Baud;
     fn generate(&self) -> Vec<syn::Stmt>;
+    fn generate_enable_interrupt(&self) -> syn::Stmt;
 }
 
 /// The trait that each device pin should implement. For a complex example impression

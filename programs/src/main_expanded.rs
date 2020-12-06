@@ -14,16 +14,15 @@ struct BluePill;
 impl BluePill {
     #[inline]
     fn init() {
-        use embedded_rust::device::{Channel, Port};
-        use embedded_rust::resources::Resource;
-        use embedded_rust::resources::{InputPin, OutputPin, PWMPin, Pin};
-        use embedded_rust::Runtime;
-        use stm32f1xx_hal::gpio::{self, Edge, ExtiPin};
-        use stm32f1xx_hal::pac;
         use stm32f1xx_hal::prelude::*;
-        use stm32f1xx_hal::pwm::{self, PwmChannel};
-        use stm32f1xx_hal::serial::{Config, Serial};
+        use stm32f1xx_hal::gpio::{self, Edge, ExtiPin};
         use stm32f1xx_hal::timer::{self, Timer};
+        use stm32f1xx_hal::pwm::{self, PwmChannel};
+        use stm32f1xx_hal::pac;
+        use stm32f1xx_hal::serial::{self, Config};
+        use embedded_rust::resources::{Resource, Pin, InputPin, OutputPin, PWMPin, Serial};
+        use embedded_rust::device::{Port, Channel, SerialID};
+        use embedded_rust::Runtime;
         let peripherals = stm32f1xx_hal::pac::Peripherals::take().unwrap();
         let mut flash = peripherals.FLASH.constrain();
         let mut rcc = peripherals.RCC.constrain();
@@ -46,7 +45,7 @@ impl BluePill {
         let (pa1) = timer
             .pwm::<timer::Tim2NoRemap, _, _, _>((pa1), &mut afio.mapr, 10000u32.hz())
             .split();
-        let mut usart1 = Serial::usart1(
+        let mut usart1 = serial::Serial::usart1(
             peripherals.USART1,
             (pb6, pb7),
             &mut afio.mapr,
@@ -54,6 +53,7 @@ impl BluePill {
             clocks,
             &mut rcc.apb2,
         );
+        let (usart1_tx, usart1_rx) = usart1.split();
         static mut SYS: Option<()> = None;
         static mut SYS_ARRAY: Option<[&'static mut dyn Resource; 0usize]> = None;
         static mut INPUT_PINS: Option<(InputPin<gpio::gpioa::PA0<gpio::Input<gpio::PullUp>>>,)> =
@@ -67,8 +67,8 @@ impl BluePill {
         static mut PWM_PINS_ARRAY: Option<[&'static mut dyn Resource; 1usize]> = None;
         static mut CHANNELS: Option<()> = None;
         static mut CHANNELS_ARRAY: Option<[&'static mut dyn Resource; 0usize]> = None;
-        static mut SERIALS: Option<()> = None;
-        static mut SERIALS_ARRAY: Option<[&'static mut dyn Resource; 0usize]> = None;
+        static mut SERIALS: Option<(Serial<serial::Tx<pac::USART1>, u8, serial::Error>,)> = None;
+        static mut SERIALS_ARRAY: Option<[&'static mut dyn Resource; 1usize]> = None;
         static mut TIMERS: Option<()> = None;
         static mut TIMERS_ARRAY: Option<[&'static mut dyn Resource; 0usize]> = None;
         unsafe {
@@ -87,9 +87,9 @@ impl BluePill {
             CHANNELS = Some(());
             let channels = CHANNELS.as_mut().unwrap();
             CHANNELS_ARRAY = Some([]);
-            SERIALS = Some(());
+            SERIALS = Some((Serial::new(SerialID::Usart1, usart1_tx, usart1_rx),));
             let serials = SERIALS.as_mut().unwrap();
-            SERIALS_ARRAY = Some([]);
+            SERIALS_ARRAY = Some([&mut serials.0]);
             TIMERS = Some(());
             let timers = TIMERS.as_mut().unwrap();
             TIMERS_ARRAY = Some([]);
@@ -118,6 +118,7 @@ impl BluePill {
     fn run() -> ! {
         unsafe {
             stm32f1xx_hal::pac::NVIC::unmask(stm32f1xx_hal::pac::Interrupt::EXTI0);
+            stm32f1xx_hal::pac::NVIC::unmask(stm32f1xx_hal::pac::Interrupt::USART1);
         }
         embedded_rust::Runtime::get().run()
     }
@@ -173,6 +174,7 @@ pub async fn test_task() {
     let mut led = BluePill::get_resource("digital:gpio/pc13").unwrap();
     let mut brightness = Brightness { level: Level::Off };
     let mut pwm = BluePill::get_resource("percent:pwm/pa1").unwrap();
+    let mut usart1 = BluePill::get_resource("bus:serial/usart1").unwrap();
     pwm.write(&if false {
         brightness.next().to_be_bytes()
     } else {
@@ -181,16 +183,9 @@ pub async fn test_task() {
     .await
     .unwrap();
     let mut led_state = false;
-    let mut buf = [0; 1];
-    while let Ok(_count) = button_events.read(&mut buf).await {
-        led_state = !led_state;
-        led.write(&[led_state as u8]).await.unwrap();
-        pwm.write(&if false {
-            brightness.next().to_be_bytes()
-        } else {
-            brightness.next().to_le_bytes()
-        })
-        .await
-        .unwrap();
+    let mut buf = [0; 10];
+    loop {
+        usart1.write("ABCDEFGHIJ".as_bytes()).await.unwrap();
+        usart1.read(&mut buf).await.unwrap();
     }
 }

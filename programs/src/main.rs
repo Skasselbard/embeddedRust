@@ -97,16 +97,25 @@ pub async fn test_task() {
     let mut led = BluePill::get_resource("digital:gpio/pc13").unwrap();
     let mut brightness = Brightness { level: Level::Off };
     let mut pwm = BluePill::get_resource("percent:pwm/pa1").unwrap();
+    let mut usart1 = BluePill::get_resource("bus:serial/usart1").unwrap();
     pwm.write(&to_target_endianess!(brightness.next()))
         .await
         .unwrap();
     let mut led_state = false;
-    let mut buf = [0; 1];
-    while let Ok(_count) = button_events.read(&mut buf).await {
-        led_state = !led_state;
-        led.write(&[led_state as u8]).await.unwrap();
-        pwm.write(&to_target_endianess!(brightness.next()))
-            .await
-            .unwrap();
+    let mut buf = [0; 10];
+    // TODO: Use Interrupts
+    // TODO: the serial has to be read on an event and store the result in a buffer
+    // TODO: and the read function of the resource has to read from the buffer
+    loop {
+        usart1.write("ABCDEFGHIJ".as_bytes()).await.unwrap();
+        usart1.read(&mut buf).await.unwrap();
+        // log::info!("{:?}", buf);
     }
+    // while let Ok(_count) = button_events.read(&mut buf).await {
+    //     led_state = !led_state;
+    //     led.write(&[led_state as u8]).await.unwrap();
+    //     pwm.write(&to_target_endianess!(brightness.next()))
+    //         .await
+    //         .unwrap();
+    // }
 }

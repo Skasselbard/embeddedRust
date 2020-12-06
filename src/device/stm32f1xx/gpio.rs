@@ -31,42 +31,6 @@ pub enum Port {
     P14,
     P15,
 }
-
-// fn pin_from_uri(uri: &str) -> Result<Pin, RuntimeError> {
-//     // scheme:gpio/pb13 -> pb13
-//     let pin_str = uri.rsplit("/").next().unwrap();
-//     // pb13 -> b
-//     let channel = match pin_str.chars().nth(1).unwrap() {
-//         'a' | 'A' => Channel::A,
-//         'b' | 'B' => Channel::B,
-//         'c' | 'C' => Channel::C,
-//         'd' | 'D' => Channel::D,
-//         'e' | 'E' => Channel::E,
-//         _ => return Err(RuntimeError::UriParseError),
-//     };
-//     // pb13 -> 13
-//     let port = match pin_str {
-//         s if s.ends_with("0") || s.ends_with("00") => Port::P00,
-//         s if s.ends_with("1") || s.ends_with("01") => Port::P01,
-//         s if s.ends_with("2") || s.ends_with("02") => Port::P02,
-//         s if s.ends_with("3") || s.ends_with("03") => Port::P03,
-//         s if s.ends_with("4") || s.ends_with("04") => Port::P04,
-//         s if s.ends_with("5") || s.ends_with("05") => Port::P05,
-//         s if s.ends_with("6") || s.ends_with("06") => Port::P06,
-//         s if s.ends_with("7") || s.ends_with("07") => Port::P07,
-//         s if s.ends_with("8") || s.ends_with("08") => Port::P08,
-//         s if s.ends_with("9") || s.ends_with("09") => Port::P09,
-//         s if s.ends_with("10") => Port::P10,
-//         s if s.ends_with("11") => Port::P11,
-//         s if s.ends_with("12") => Port::P12,
-//         s if s.ends_with("13") => Port::P13,
-//         s if s.ends_with("14") => Port::P14,
-//         s if s.ends_with("15") => Port::P15,
-//         _ => return Err(RuntimeError::UriParseError),
-//     };
-//     Ok(Pin::new(channel, port))
-// }
-
 impl core::fmt::Display for Channel {
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         match self {

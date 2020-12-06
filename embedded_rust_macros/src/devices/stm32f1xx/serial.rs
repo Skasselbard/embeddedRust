@@ -96,20 +96,24 @@ impl Serial for StmSerial {
     fn pins_as_gpio(&self) -> Vec<Box<dyn crate::types::Gpio>> {
         vec![self.reveceive_as_gpio(), self.transmit_as_gpio()]
     }
-    fn ty(&self) -> Type {
+    fn tx_ty(&self) -> Type {
         let name = format_ident!("{}", self.name().to_uppercase());
-        let tx_ty = self.transmit_as_gpio().ty();
-        let rx_ty = self.reveceive_as_gpio().ty();
         parse_quote!(
-            serial::Serial<pac::#name, (#tx_ty, #rx_ty)>
+            serial::Tx<pac::#name>
         )
-        // parse_quote!((#tx_ty, #rx_ty))
+    }
+    fn read_err_ty(&self) -> Type {
+        parse_quote!(serial::Error)
     }
     fn generate(&self) -> Vec<Stmt> {
         let name = format_ident!("{}", self.name());
         let name_upper = format_ident!("{}", self.name().to_uppercase());
-        let tx = format_ident!("{}", self.transmit_pin().name());
-        let rx = format_ident!("{}", self.receive_pin().name());
+        // Pins used for tx and rx
+        let tx_pin = format_ident!("{}", self.transmit_pin().name());
+        let rx_pin = format_ident!("{}", self.receive_pin().name());
+        // RX and TX channel after splitting the serial
+        let tx_channel = format_ident!("{}_tx", self.name());
+        let rx_channel = format_ident!("{}_rx", self.name());
         let peripherals = peripherals_ident!();
         let baud = self.baud().0;
         let ap_bus = match self.name().as_str() {
@@ -121,11 +125,22 @@ impl Serial for StmSerial {
         parse_quote!(
             let mut #name = serial::Serial::#name(
                 #peripherals.#name_upper,
-                (#tx, #rx),
+                (#tx_pin, #rx_pin),
                 &mut afio.mapr,
                 Config::default().baudrate(#baud.bps()),
                 clocks,
                 &mut rcc.#ap_bus
+            );
+            let (mut #tx_channel, mut #rx_channel) = #name.split();
+            #rx_channel.listen();
+        )
+    }
+
+    fn generate_enable_interrupt(&self) -> Stmt {
+        let interrupt_line = format_ident!("{}", self.name().to_uppercase());
+        parse_quote!(
+            stm32f1xx_hal::pac::NVIC::unmask(
+                stm32f1xx_hal::pac::Interrupt::#interrupt_line
             );
         )
     }

@@ -7,10 +7,15 @@ pub(crate) use self::cortex_m::init_heap;
 #[cfg(feature = "stm32f1xx")]
 use stm32f1xx as dev;
 
+use crate::queues::Producer;
+use alloc::boxed::Box;
+
 pub type ExtiEvent = dev::ExtiEvent;
 pub type Channel = dev::Channel;
 pub type Port = dev::Port;
 pub type SerialID = dev::SerialID;
+pub type SerialQueue = dev::SerialQueue;
+pub type SerialQueueItem = dev::SerialQueueItem;
 
 /// Should return the start of the heap allocation
 /// In stm32f1 it startts at the data segment .uninit after .bss
@@ -29,4 +34,9 @@ pub fn sleep() {
 #[inline]
 pub fn handle_exti_event(event: &ExtiEvent) {
     dev::handle_exti_event(event)
+}
+
+#[inline]
+pub fn register_serial(serial_id: SerialID, p: Box<dyn Producer<SerialQueueItem>>) {
+    dev::register_serial(serial_id, p)
 }

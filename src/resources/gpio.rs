@@ -70,6 +70,7 @@ pub enum TriggerEdge {
 pub struct InputPin<HalPin: 'static> {
     id: Pin,
     resource: HalPin,
+    // TODO: can this be done better?
     /// The amount of unhandles events
     events: u8,
 }

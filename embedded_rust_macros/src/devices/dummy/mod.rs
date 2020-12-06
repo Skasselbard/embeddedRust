@@ -202,10 +202,6 @@ impl Serial for DummySerial {
         todo!()
     }
 
-    fn ty(&self) -> syn::Type {
-        todo!()
-    }
-
     fn generate(&self) -> Vec<syn::Stmt> {
         todo!()
     }
@@ -219,6 +215,18 @@ impl Serial for DummySerial {
     }
 
     fn serial_id(&self) -> String {
+        todo!()
+    }
+
+    fn generate_enable_interrupt(&self) -> syn::Stmt {
+        todo!()
+    }
+
+    fn tx_ty(&self) -> syn::Type {
+        todo!()
+    }
+
+    fn read_err_ty(&self) -> syn::Type {
         todo!()
     }
 }

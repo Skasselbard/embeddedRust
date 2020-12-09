@@ -14,6 +14,7 @@ Getting rust to work an the Blue Pill stm32 board
 - [openocd docu](http://openocd.org/doc-release/pdf/openocd.pdf)
 - https://medium.com/@ly.lee/hosting-embedded-rust-apps-on-apache-mynewt-with-stm32-blue-pill-c86b119fe5f
 - [rust os how to](https://os.phil-opp.com/)
+- [little kernel apis](https://github.com/littlekernel/lk/wiki/Kernel-APIs-And-Primitives)
 
 # crates
 - blue pill peripherals crate https://crates.io/crates/stm32f103xx

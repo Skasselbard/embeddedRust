@@ -2,15 +2,13 @@ use alloc::boxed::Box;
 use alloc::rc::Rc;
 use heapless::spsc::{Consumer, Producer, Queue, SingleCore};
 use heapless::ArrayLength;
-/// - Heap Allocated Queue
 /// - max 255 entries
 /// - wrapper around heapless::spsc::Queue
-/// - has to be initialized by calling init()
-pub struct ShortAllocFixedSPSCQueue<T, N>
+pub struct ShortFixedSPSCQueue<T, N>
 where
     N: ArrayLength<T>,
 {
-    queue: Option<Queue<T, N, u8, SingleCore>>,
+    queue: Queue<T, N, u8, SingleCore>,
 }
 pub struct ShortAllocFixedSPSCConsumer<T, N>
 where
@@ -25,17 +23,15 @@ where
     queue: Rc<Queue<T, N, u8, SingleCore>>,
 }
 
-impl<T, N> ShortAllocFixedSPSCQueue<T, N>
+impl<T, N> ShortFixedSPSCQueue<T, N>
 where
     N: ArrayLength<T>,
 {
     #[inline]
     pub fn new() -> Self {
-        Self { queue: None }
-    }
-    #[inline]
-    pub fn init(&mut self) {
-        self.queue = unsafe { Some(Queue::u8_sc()) }
+        Self {
+            queue: unsafe { Queue::u8_sc() },
+        }
     }
     /// This function is unsafe because the programmer must make sure that the queue's consumer and producer endpoints are kept on a single core for their entire lifetime.
     #[inline]
@@ -45,10 +41,7 @@ where
         Producer<T, N, u8, SingleCore>,
         Consumer<T, N, u8, SingleCore>,
     ) {
-        self.queue
-            .as_mut()
-            .expect("split on uninitialized queue")
-            .split()
+        self.queue.split()
     }
 }
 
@@ -69,27 +62,18 @@ where
     }
 }
 
-impl<T, N> super::Queue<T> for ShortAllocFixedSPSCQueue<T, N>
+impl<T, N> super::Queue<T> for ShortFixedSPSCQueue<T, N>
 where
     N: ArrayLength<T>,
 {
     #[inline]
     fn enqueue(&mut self, item: T) -> Result<(), T> {
-        match &mut self.queue {
-            Some(q) => q.enqueue(item),
-            None => {
-                log::warn!("uninitialized queue");
-                Err(item)
-            }
-        }
+        self.enqueue(item)
     }
 
     #[inline]
     fn dequeue(&mut self) -> Option<T> {
-        match &mut self.queue {
-            Some(q) => q.dequeue(),
-            None => None,
-        }
+        self.dequeue()
     }
 }
 // impl<T, N> super::Consumer<T> for ShortAllocFixedSPSCConsumer<T, N>

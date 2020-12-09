@@ -92,16 +92,15 @@ macro_rules! define_static {
         );
         src
     }};
-    ($name:expr, $serialType:expr, $word_tys:expr, $tx_tys:expr, $read_err_tys:expr) => {{
-        let tys: &Vec<Type> = $tx_tys;
-        let read_err_tys: &Vec<Type> = $read_err_tys;
-        let len: usize = tys.len();
+    ($name:expr, $serialType:expr, $rx_tys:expr, $tx_tys:expr) => {{
+        let rx_tys: &Vec<Type> = $rx_tys;
+        let tx_tys: &Vec<Type> = $tx_tys;
+        let len: usize = rx_tys.len();
         let resource_type = quote::format_ident!("{}", $serialType);
-        let word_tys: &Vec<Type> = $word_tys;
         let ident = quote::format_ident!("{}", $name);
         let array_ident = quote::format_ident!("{}_ARRAY", $name);
         let src: Vec<Stmt> = syn::parse_quote!(
-            static mut #ident: Option<(#(#resource_type<#tys, #word_tys, #read_err_tys>,)*)> = None;
+            static mut #ident: Option<(#(#resource_type<#tx_tys, #rx_tys>,)*)> = None;
             static mut #array_ident: Option<[&'static mut dyn Resource; #len]> = None;
         );
         src
@@ -126,9 +125,8 @@ pub(crate) fn component_statics(config: &Config) -> Vec<Stmt> {
     stmts.append(&mut define_static!(
         "SERIALS",
         "Serial",
-        &config.serial_word_tys(),
-        &config.serial_tx_tys(),
-        &config.serial_read_err_tys()
+        &config.serial_rx_tys(),
+        &config.serial_tx_tys()
     ));
     stmts.append(&mut define_static!("TIMERS", (), &vec![]));
     stmts.into()

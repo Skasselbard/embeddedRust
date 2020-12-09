@@ -14,15 +14,15 @@ struct BluePill;
 impl BluePill {
     #[inline]
     fn init() {
-        use stm32f1xx_hal::prelude::*;
-        use stm32f1xx_hal::gpio::{self, Edge, ExtiPin};
-        use stm32f1xx_hal::timer::{self, Timer};
-        use stm32f1xx_hal::pwm::{self, PwmChannel};
-        use stm32f1xx_hal::pac;
-        use stm32f1xx_hal::serial::{self, Config};
-        use embedded_rust::resources::{Resource, Pin, InputPin, OutputPin, PWMPin, Serial};
-        use embedded_rust::device::{Port, Channel, SerialID};
+        use embedded_rust::device::{Channel, Port, SerialID};
+        use embedded_rust::resources::{InputPin, OutputPin, PWMPin, Pin, Resource, Serial};
         use embedded_rust::Runtime;
+        use stm32f1xx_hal::gpio::{self, Edge, ExtiPin};
+        use stm32f1xx_hal::pac;
+        use stm32f1xx_hal::prelude::*;
+        use stm32f1xx_hal::pwm::{self, PwmChannel};
+        use stm32f1xx_hal::serial::{self, Config};
+        use stm32f1xx_hal::timer::{self, Timer};
         let peripherals = stm32f1xx_hal::pac::Peripherals::take().unwrap();
         let mut flash = peripherals.FLASH.constrain();
         let mut rcc = peripherals.RCC.constrain();
@@ -53,7 +53,8 @@ impl BluePill {
             clocks,
             &mut rcc.apb2,
         );
-        let (usart1_tx, usart1_rx) = usart1.split();
+        let (mut usart1_tx, mut usart1_rx) = usart1.split();
+        usart1_rx.listen();
         static mut SYS: Option<()> = None;
         static mut SYS_ARRAY: Option<[&'static mut dyn Resource; 0usize]> = None;
         static mut INPUT_PINS: Option<(InputPin<gpio::gpioa::PA0<gpio::Input<gpio::PullUp>>>,)> =
@@ -67,7 +68,8 @@ impl BluePill {
         static mut PWM_PINS_ARRAY: Option<[&'static mut dyn Resource; 1usize]> = None;
         static mut CHANNELS: Option<()> = None;
         static mut CHANNELS_ARRAY: Option<[&'static mut dyn Resource; 0usize]> = None;
-        static mut SERIALS: Option<(Serial<serial::Tx<pac::USART1>, u8, serial::Error>,)> = None;
+        static mut SERIALS: Option<(Serial<serial::Tx<pac::USART1>, serial::Rx<pac::USART1>>,)> =
+            None;
         static mut SERIALS_ARRAY: Option<[&'static mut dyn Resource; 1usize]> = None;
         static mut TIMERS: Option<()> = None;
         static mut TIMERS_ARRAY: Option<[&'static mut dyn Resource; 0usize]> = None;

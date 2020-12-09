@@ -95,7 +95,6 @@ impl SysGeneration for DummyGenerator {
 
 impl GpioGeneration for DummyGenerator {
     fn interrupts(&self, _: &std::vec::Vec<Box<dyn types::Gpio>>) -> std::vec::Vec<syn::Stmt> {
-        //TODO:
         vec![]
     }
 }
@@ -104,7 +103,6 @@ impl PWMGeneration for DummyGenerator {}
 
 impl SerialGeneration for DummyGenerator {
     fn generate_serials(&self, _serials: &Vec<&dyn Serial>) -> Vec<syn::Stmt> {
-        // TODO:
         todo!()
     }
 }
@@ -227,6 +225,10 @@ impl Serial for DummySerial {
     }
 
     fn read_err_ty(&self) -> syn::Type {
+        todo!()
+    }
+
+    fn rx_ty(&self) -> syn::Type {
         todo!()
     }
 }

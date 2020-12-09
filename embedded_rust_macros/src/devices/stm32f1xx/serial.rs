@@ -96,6 +96,12 @@ impl Serial for StmSerial {
     fn pins_as_gpio(&self) -> Vec<Box<dyn crate::types::Gpio>> {
         vec![self.reveceive_as_gpio(), self.transmit_as_gpio()]
     }
+    fn rx_ty(&self) -> Type {
+        let name = format_ident!("{}", self.name().to_uppercase());
+        parse_quote!(
+            serial::Rx<pac::#name>
+        )
+    }
     fn tx_ty(&self) -> Type {
         let name = format_ident!("{}", self.name().to_uppercase());
         parse_quote!(

@@ -265,6 +265,9 @@ impl Config {
             .flat_map(|serial| serial.pins_as_gpio())
             .collect()
     }
+    pub fn serial_rx_tys(&self) -> Vec<Type> {
+        self.serials().iter().map(|serial| serial.rx_ty()).collect()
+    }
     pub fn serial_tx_tys(&self) -> Vec<Type> {
         self.serials().iter().map(|serial| serial.tx_ty()).collect()
     }

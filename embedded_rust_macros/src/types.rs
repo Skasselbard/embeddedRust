@@ -38,6 +38,7 @@ pub trait Serial {
     fn word_ty(&self) -> Type;
     fn baud(&self) -> Baud;
     fn generate(&self) -> Vec<syn::Stmt>;
+    // TODO: probably not necessary
     fn generate_enable_interrupt(&self) -> syn::Stmt;
 }
 

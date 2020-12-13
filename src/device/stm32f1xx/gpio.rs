@@ -73,8 +73,8 @@ macro_rules! check_interrupt {
         let mut pin = unsafe { core::mem::transmute::<(), $pinty>(()) };
         if pin.check_interrupt() {
             let e = Event::ExternalInterrupt(ExtiEvent::Gpio(Pin::new($channel, $port)));
-            cortex_m::interrupt::free(|cs| {
-                events::push(e, cs);
+            cortex_m::interrupt::free(|_| {
+                events::push(e);
                 pin.clear_interrupt_pending_bit();
             });
         }

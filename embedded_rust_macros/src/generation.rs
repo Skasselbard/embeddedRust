@@ -175,9 +175,12 @@ pub(crate) fn static_init(config: &Config) -> ExprUnsafe {
     ));
     inits.append(&mut init_static!("TIMERS", &vec![], &vec![]));
 
+    let serial_indizes = (0..config.serial_idents().len()).map(syn::Index::from);
     parse_quote!(
         unsafe{
            #(#inits)*
+           // Also the init function of the serials has to be called
+           #(SERIALS.as_mut().unwrap().#serial_indizes.init();)*
         }
     )
 }

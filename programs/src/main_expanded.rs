@@ -14,15 +14,15 @@ struct BluePill;
 impl BluePill {
     #[inline]
     fn init() {
-        use embedded_rust::device::{Channel, Port, SerialID};
-        use embedded_rust::resources::{InputPin, OutputPin, PWMPin, Pin, Resource, Serial};
-        use embedded_rust::Runtime;
-        use stm32f1xx_hal::gpio::{self, Edge, ExtiPin};
-        use stm32f1xx_hal::pac;
         use stm32f1xx_hal::prelude::*;
-        use stm32f1xx_hal::pwm::{self, PwmChannel};
-        use stm32f1xx_hal::serial::{self, Config};
+        use stm32f1xx_hal::gpio::{self, Edge, ExtiPin};
         use stm32f1xx_hal::timer::{self, Timer};
+        use stm32f1xx_hal::pwm::{self, PwmChannel};
+        use stm32f1xx_hal::pac;
+        use stm32f1xx_hal::serial::{self, Config};
+        use embedded_rust::resources::{Resource, Pin, InputPin, OutputPin, PWMPin, Serial};
+        use embedded_rust::device::{Port, Channel, SerialID};
+        use embedded_rust::Runtime;
         let peripherals = stm32f1xx_hal::pac::Peripherals::take().unwrap();
         let mut flash = peripherals.FLASH.constrain();
         let mut rcc = peripherals.RCC.constrain();
@@ -95,6 +95,7 @@ impl BluePill {
             TIMERS = Some(());
             let timers = TIMERS.as_mut().unwrap();
             TIMERS_ARRAY = Some([]);
+            SERIALS.as_mut().unwrap().0.init();
         }
         unsafe {
             Runtime::init(

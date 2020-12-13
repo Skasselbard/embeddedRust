@@ -2,12 +2,13 @@ mod cortex_m;
 
 #[cfg(feature = "stm32f1xx")]
 mod stm32f1xx;
+
+use crate::resources::serial::InterruptHandler;
+
 #[cfg(feature = "stm32f1xx")]
 pub(crate) use self::cortex_m::init_heap;
 #[cfg(feature = "stm32f1xx")]
 use stm32f1xx as dev;
-
-use crate::resources::serial::SerialBuffer;
 
 pub type ExtiEvent = dev::ExtiEvent;
 pub type Channel = dev::Channel;
@@ -16,7 +17,7 @@ pub type SerialWord = dev::SerialWord;
 pub type SerialWriteError = dev::SerialWriteError;
 pub type SerialReadError = dev::SerialReadError;
 pub type SerialID = dev::SerialID;
-pub type SerialQueue = dev::SerialQueue;
+pub(crate) type SerialInterrupConfigBuilder = dev::SerialInterrupConfigBuilder;
 
 /// Should return the start of the heap allocation
 /// In stm32f1 it startts at the data segment .uninit after .bss
@@ -38,6 +39,6 @@ pub fn handle_exti_event(event: &ExtiEvent) {
 }
 
 #[inline]
-pub(crate) fn register_serial(serial_id: SerialID, buffer: SerialBuffer) {
-    dev::register_serial(serial_id, buffer)
+pub(crate) fn register_serial(queue: InterruptHandler) {
+    dev::register_serial(queue)
 }

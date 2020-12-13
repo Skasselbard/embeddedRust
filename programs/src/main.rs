@@ -107,9 +107,10 @@ pub async fn test_task() {
     // TODO: the serial has to be read on an event and store the result in a buffer
     // TODO: and the read function of the resource has to read from the buffer
     loop {
-        usart1.write("ABCDEFGHIJ".as_bytes()).await.unwrap();
+        usart1.write("A".as_bytes()).await.unwrap();
+        log::info!("written");
         usart1.read(&mut buf).await.unwrap();
-        // log::info!("{:?}", buf);
+        log::info!("{:?}", buf);
     }
     // while let Ok(_count) = button_events.read(&mut buf).await {
     //     led_state = !led_state;

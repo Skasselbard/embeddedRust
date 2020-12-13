@@ -1,89 +1,135 @@
 use super::{path::RawPath, Resource, ResourceMode};
-use crate::device::{SerialID, SerialReadError, SerialWord, SerialWriteError};
-use crate::queues::{Consumer, Producer, Queue};
+use crate::{
+    device::{
+        SerialID, SerialInterrupConfigBuilder, SerialReadError, SerialWord, SerialWriteError,
+    },
+    events::{self, Event},
+    Runtime,
+};
 use crate::{io, schemes::Scheme};
-use alloc::boxed::Box;
 use bbqueue::{BBBuffer, ConstBBBuffer};
-use core::task::{Context, Poll};
+use core::{
+    mem::{size_of, MaybeUninit},
+    task::{Context, Poll},
+};
+use embedded_hal::serial::{Read, Write};
 use io::SeekFrom;
 
-type SerialQueue = BBBuffer<bbqueue::consts::U16>;
-type SerialProducer = bbqueue::Producer<'static, bbqueue::consts::U16>;
-type SerialConsumer = bbqueue::Consumer<'static, bbqueue::consts::U16>;
+const WORD_SIZE: usize = core::mem::size_of::<SerialWord>();
 
-type Reader = dyn HalReader<Word = SerialWord, Error = SerialReadError>;
-type Writer = dyn HalWriter<Word = SerialWord, Error = SerialWriteError>;
-/// Null
-// const NUL: u8 = 0;
-/// End Of Transmission
-// const EOT: u8 = 4;
+type SerialQueue = BBBuffer<bbqueue::consts::U12>;
+type SerialProducer = bbqueue::Producer<'static, bbqueue::consts::U12>;
+type SerialConsumer = bbqueue::Consumer<'static, bbqueue::consts::U12>;
+type SerialQueueItem = Result<SerialWord, SerialReadError>;
 
-pub trait HalReader {
-    type Word;
-    type Error;
-    fn read(&mut self) -> Result<SerialWord, SerialReadError>;
-    fn from_word(&self, word: Self::Word) -> &[u8];
+fn from_word(word: SerialWord) -> [u8; WORD_SIZE] {
+    unsafe { core::mem::transmute(word) }
 }
-pub trait HalWriter {
-    type Word;
-    type Error;
-    const WORD_SIZE: usize = core::mem::size_of::<Self::Word>();
-
-    fn write(&mut self, word: Self::Word) -> Result<(), Self::Error>;
-    fn flush(&mut self) -> Result<(), Self::Error>;
-    // fn to_word(&self, bytes: [u8; Self::WORD_SIZE]) -> Self::Word;
+unsafe fn to_word(bytes: &[u8]) -> &SerialWord {
+    assert_eq!(bytes.len(), WORD_SIZE);
+    let bytes_array = bytes.first().unwrap() as *const u8;
+    core::mem::transmute(bytes_array)
 }
-
-impl<T> HalReader for T
-where
-    T: embedded_hal::serial::Read<SerialWord, Error = SerialReadError>,
-{
-    type Word = SerialWord;
-    type Error = SerialReadError;
-
-    fn read(&mut self) -> Result<SerialWord, SerialReadError> {
-        match self.read() {
-            Ok(w) => Ok(w),
-            Err(nb::Error::WouldBlock) => unreachable!(), // TODO: is it unreachable?
-            Err(nb::Error::Other(e)) => Err(e),
+#[inline]
+fn enqueue(buffer: &mut SerialProducer, item: &SerialQueueItem) {
+    // get bbBuffer grant
+    let mut grant = buffer
+        .grant_exact(size_of::<SerialQueueItem>())
+        .expect("Serial buffer overflow");
+    // extract the byte array
+    let buffer = grant.buf().as_mut_ptr();
+    // copy bytes of item to the grant array
+    unsafe {
+        core::ptr::copy_nonoverlapping(
+            item as *const SerialQueueItem as *const u8,
+            buffer,
+            size_of::<SerialQueueItem>(),
+        );
+    }
+    // make it available for consumption
+    grant.commit(size_of::<SerialQueueItem>())
+}
+#[inline]
+fn dequeue(buffer: &mut SerialConsumer) -> Option<SerialQueueItem> {
+    match buffer.read() {
+        Ok(grant) => {
+            // TODO: does this check something in a sufficiantly optimized debug binary?
+            assert!(grant.len() >= size_of::<Result<SerialWord, SerialReadError>>());
+            let item = &grant.buf()[0];
+            unsafe {
+                // get memory on stack
+                let mut result: Result<SerialWord, SerialReadError> =
+                    MaybeUninit::uninit().assume_init();
+                // copy to new memory
+                core::ptr::copy_nonoverlapping(
+                    item,
+                    &mut result as *mut Result<SerialWord, SerialReadError> as *mut u8,
+                    size_of::<Result<SerialWord, SerialReadError>>(),
+                );
+                Some(result)
+            }
+        }
+        Err(bbqueue::Error::InsufficientSize) => None,
+        Err(bbqueue::Error::GrantInProgress) => {
+            unreachable!(); // TODO: Only true single threaded
+        }
+        Err(bbqueue::Error::AlreadySplit) => {
+            unreachable!()
         }
     }
-
-    fn from_word(&self, word: Self::Word) -> &[u8] {
-        todo!()
-    }
 }
 
-impl<T> HalWriter for T
-where
-    T: embedded_hal::serial::Write<SerialWord, Error = SerialWriteError>,
-{
-    type Word = SerialWord;
-    type Error = SerialWriteError;
-
-    fn write(&mut self, word: Self::Word) -> Result<(), Self::Error> {
-        todo!()
-    }
-
-    fn flush(&mut self) -> Result<(), Self::Error> {
-        todo!()
-    }
-}
-
-pub(crate) struct SerialBuffer {
-    reader: &'static mut Reader,
+pub(crate) struct InterruptHandler {
+    pub serial_id: SerialID,
+    reader: &'static mut dyn embedded_hal::serial::Read<SerialWord, Error = SerialReadError>,
     buffer: SerialProducer,
+    config: &'static dyn InterruptConfig,
 }
-
-impl SerialBuffer {
-    pub(crate) fn buffer_word(&mut self) {
-        log::info!("U1");
-        // if let Err(_) = self.buffer.enqueue(self.reader.read()) {
-        //     panic!("serial buffer overflow");
-        // }
-        unimplemented!();
-        // let e = Event::ExternalInterrupt(ExtiEvent::Gpio(Pin::new($channel, $port)));
+impl InterruptHandler {
+    #[inline]
+    pub(crate) fn handle(&mut self) {
+        // read_pin
+        let result = match self.reader.read() {
+            Ok(r) => {
+                // log::info!("ok");
+                Ok(r)
+            }
+            Err(nb::Error::WouldBlock) => {
+                // log::info!("bl");
+                // can't read
+                // probably was a write interrupt
+                if self.config.write_enabled() {
+                    // disable write interrupt and send event
+                    // writing is handled by the resource implementation
+                    // resource will be waked by event and try writing again
+                    unsafe { self.config.disable_write() };
+                    events::push(Event::SerialEvent(self.serial_id));
+                } else {
+                    unreachable!(); // I think...
+                }
+                return;
+            }
+            Err(nb::Error::Other(e)) => {
+                // log::info!("er");
+                Err(e)
+            }
+        };
+        // log::info!("{:?}", result);
+        // store value
+        enqueue(&mut self.buffer, &result);
+        events::push(Event::SerialEvent(self.serial_id));
     }
+}
+pub(crate) trait InterruptConfig {
+    unsafe fn init(&mut self, serial: SerialID);
+    fn write_enabled(&self) -> bool;
+    unsafe fn disable_write(&self);
+    unsafe fn enable_write(&self);
+    unsafe fn disable_read(&self);
+    unsafe fn enable_read(&self);
+}
+pub(crate) trait InterruptConfigBuilder {
+    unsafe fn new(serial_id: SerialID) -> &'static dyn InterruptConfig;
 }
 
 pub struct Serial<W, R> {
@@ -91,95 +137,86 @@ pub struct Serial<W, R> {
     writer: W,
     reader: R,
     read_buffer: Option<SerialConsumer>,
+    interrupt_config: &'static dyn InterruptConfig,
+}
+#[derive(Clone, Ord, PartialOrd, Eq, PartialEq, Debug)]
+pub enum SerialDirection {
+    Read,
+    Write,
 }
 
-#[allow(unused)]
-fn debug_word_type<WordType>(word: WordType, word_size: usize) {
-    unsafe {
-        if word_size == 1 {
-            log::info!("{:?}", *(&word as *const WordType as *const u8));
-        } else {
-            let mut s = alloc::string::String::new();
-            for i in 0..word_size {
-                let byte = *(&word as *const WordType as *const u8).add(i);
-                s.push(byte.into());
-                s.push(',');
-            }
-            log::info!("[{}]", s);
-        }
-    }
-}
 impl<W, R> Resource for Serial<W, R>
 where
-    W: HalWriter<Word = SerialWord, Error = SerialWriteError>,
+    W: Write<SerialWord, Error = SerialWriteError>,
+    R: Read<SerialWord, Error = SerialReadError>,
 {
     fn poll_read(
         &mut self,
-        _context: &mut Context,
+        context: &mut Context,
         _scheme: Scheme,
         mode: ResourceMode,
         buf: &mut [u8],
     ) -> Poll<Result<usize, io::Error>> {
         //TODO: use scheme
         if let ResourceMode::Default = mode {
-            // let read_length = buf.len() % Self::WORD_SIZE;
-            // for i in 0..read_length {
-            //     let mut word = match self.writer.read() {
-            //         Ok(w) => w,
-            //         Err(nb::Error::WouldBlock) => {
-            //             return Poll::Pending;
-            //         }
-            //         Err(nb::Error::Other(_)) => {
-            //             return Poll::Ready(Err(io::Error::Other));
-            //         }
-            //     };
-            //     unsafe {
-            //         // copy data into buffer
-            //         core::intrinsics::write_bytes::<WordType>(
-            //             buf[i * Self::WORD_SIZE] as *mut WordType,
-            //             *(&mut word as *mut WordType as *mut u8),
-            //             Self::WORD_SIZE,
-            //         );
-            //     }
-            // }
-            // Poll::Ready(Ok(read_length))
-            Poll::Ready(Ok(0))
+            log::info!("listen");
+            unsafe { self.interrupt_config.enable_read() };
+            let read_length = buf.len() / WORD_SIZE;
+            for chunk in buf.chunks_exact_mut(size_of::<SerialWord>()) {
+                match dequeue(self.read_buffer.as_mut().expect("uninitialized serial consumer")) {
+                    Some(Ok(word)) => {
+                        chunk.copy_from_slice(&from_word(word));
+                    }
+                    Some(Err(_)) => {
+                        unsafe{self.interrupt_config.disable_read()};
+                        return Poll::Ready(Err(io::Error::Interrupted))}
+                        , // TODO: Log the Error
+                    None => {
+                        Runtime::get().register_waker(
+                            &Event::SerialEvent(self.id),
+                            context.waker(),
+                        );
+                        return Poll::Pending;
+                    }
+                }
+            }
+            Poll::Ready(Ok(read_length))
         } else {
             Poll::Ready(Err(io::Error::InvalidInput))
         }
     }
     fn poll_write<'a>(
         &'a mut self,
-        _cx: &mut Context,
+        context: &mut Context,
         _scheme: Scheme,
         mode: ResourceMode,
         buf: &'a [u8],
     ) -> Poll<Result<usize, io::Error>> {
         //TODO: use scheme
         if let ResourceMode::Default = mode {
-            // let write_length = buf.len() / Self::WORD_SIZE;
-            // for i in 0..write_length {
-            //     let mut word = unsafe { core::mem::zeroed::<WordType>() };
-            //     unsafe {
-            //         // copy data from buffer
-            //         core::intrinsics::write_bytes::<WordType>(
-            //             &mut word as *mut WordType,
-            //             *(&buf[i * Self::WORD_SIZE] as *const u8),
-            //             Self::WORD_SIZE,
-            //         );
-            //     };
-            //     match self.writer.write(word) {
-            //         Ok(()) => {}
-            //         Err(nb::Error::WouldBlock) => {
-            //             return Poll::Pending;
-            //         }
-            //         Err(nb::Error::Other(_)) => {
-            //             return Poll::Ready(Err(io::Error::Other));
-            //         }
-            //     };
-            // }
-            // Poll::Ready(Ok(write_length))
-            Poll::Ready(Ok(0))
+            // only accept data that are a multiple of the word size
+            if buf.len() % WORD_SIZE != 0 {
+                return Poll::Ready(Err(io::Error::InvalidData));
+            }
+            log::info!("{:?}", buf);
+            let write_length = buf.len() / WORD_SIZE;
+            for chunk in buf.chunks_exact(WORD_SIZE) {
+                let word = unsafe { to_word(chunk) };
+                match self.writer.write(*word) {
+                    Ok(()) => {}
+                    Err(nb::Error::Other(_)) => {
+                        //TODO: log error
+                        return Poll::Ready(Err(io::Error::Other));
+                    }
+                    Err(nb::Error::WouldBlock) => {
+                        unsafe { self.interrupt_config.enable_write() };
+                        Runtime::get()
+                            .register_waker(&Event::SerialEvent(self.id), context.waker());
+                        return Poll::Pending;
+                    }
+                };
+            }
+            Poll::Ready(Ok(write_length))
         } else {
             Poll::Ready(Err(io::Error::InvalidInput))
         }
@@ -192,12 +229,12 @@ where
     ) -> Poll<Result<(), io::Error>> {
         //TODO: use scheme
         if let ResourceMode::Default = mode {
-            todo!();
-            // match self.writer.flush() {
-            //     Ok(_) => Poll::Ready(Ok(())),
-            //     Err(nb::Error::WouldBlock) => Poll::Pending,
-            //     Err(nb::Error::Other(_)) => Poll::Ready(Err(io::Error::Other)),
-            // }
+            //FIXME: handle interrupts and polls correctly
+            match self.writer.flush() {
+                Ok(()) => Poll::Ready(Ok(())),
+                Err(nb::Error::Other(_)) => Poll::Ready(Err(io::Error::Other)),
+                Err(nb::Error::WouldBlock) => Poll::Pending,
+            }
         } else {
             Poll::Ready(Err(io::Error::InvalidInput))
         }
@@ -225,10 +262,10 @@ where
     fn handle_event(&mut self) {}
 }
 
-impl<W, R: 'static> Serial<W, R>
+impl<W, R> Serial<W, R>
 where
-    W: HalWriter<Word = SerialWord, Error = SerialWriteError>,
-    R: HalReader<Word = SerialWord, Error = SerialReadError>,
+    W: Write<SerialWord, Error = SerialWriteError>,
+    R: Read<SerialWord, Error = SerialReadError>,
 {
     pub fn new(serial_id: SerialID, hal_writer: W, hal_reader: R) -> Self {
         Self {
@@ -236,16 +273,19 @@ where
             writer: hal_writer,
             reader: hal_reader,
             read_buffer: None,
+            interrupt_config: unsafe { SerialInterrupConfigBuilder::new(serial_id) },
         }
     }
     pub fn init(&'static mut self) {
         static QUEUE: SerialQueue = BBBuffer(ConstBBBuffer::new());
         let (p, c) = QUEUE.try_split().unwrap();
-        let serial_buffer = SerialBuffer {
+        let interrupt_handler = InterruptHandler {
+            serial_id: self.id,
             reader: &mut self.reader,
             buffer: p,
+            config: self.interrupt_config,
         };
-        crate::device::register_serial(self.id, serial_buffer);
+        crate::device::register_serial(interrupt_handler);
         self.read_buffer = Some(c);
     }
 }

@@ -29,7 +29,6 @@ macro_rules! from_target_endianess {
 
 mod executor;
 mod logging;
-mod queues;
 mod task;
 mod utilities;
 

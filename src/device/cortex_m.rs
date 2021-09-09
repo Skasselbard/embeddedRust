@@ -18,13 +18,13 @@ fn panic(info: &PanicInfo) -> ! {
 }
 
 #[exception]
-fn HardFault(ef: &cortex_m_rt::ExceptionFrame) -> ! {
+unsafe fn HardFault(ef: &cortex_m_rt::ExceptionFrame) -> ! {
     // prints the exception frame as a panic message
     panic!("HardFault: {:#?}", ef);
 }
 
 #[exception]
-fn DefaultHandler(irqn: i16) {
+unsafe fn DefaultHandler(irqn: i16) {
     cortex_m_semihosting::hprintln!("IRQn = {}", irqn).unwrap();
 }
 

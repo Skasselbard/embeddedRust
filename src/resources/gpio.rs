@@ -1,4 +1,4 @@
-use super::{path::RawPath, Resource, ResourceError, ResourceMode};
+use super::{path::RawPath, Resource, ResourceConfig, ResourceError, ResourceMode};
 use crate::{device::ExtiEvent, events::Event, schemes::Scheme, utilities::ByteWriter, Runtime};
 use crate::{
     device::{Channel, Port},
@@ -86,14 +86,12 @@ where
 {
     fn poll_read(
         &mut self,
-        context: &mut Context,
-        scheme: Scheme,
-        mode: ResourceMode,
+        config: &ResourceConfig,
         buf: &mut [u8],
     ) -> Poll<Result<usize, io::Error>> {
         // check if the mode kind is correct
-        if let ResourceMode::Default = mode {
-            match scheme {
+        if let ResourceMode::Default = config.mode {
+            match config.scheme {
                 // read the pin normaly
                 Scheme::Digital => match self.resource.is_high() {
                     Ok(res) => {
@@ -132,7 +130,7 @@ where
                     } else {
                         Runtime::get().register_waker(
                             &Event::ExternalInterrupt(ExtiEvent::Gpio(self.id)),
-                            context.waker(),
+                            config.context.waker(),
                         );
                         Poll::Pending
                     }
@@ -145,34 +143,20 @@ where
     }
     fn poll_write(
         &mut self,
-        _cx: &mut Context,
-        _scheme: Scheme,
-        _mode: ResourceMode,
+        config: &ResourceConfig,
         _buf: &[u8],
     ) -> Poll<Result<usize, io::Error>> {
         Poll::Ready(Err(io::Error::AddrNotAvailable))
     }
-    fn poll_flush(
-        &mut self,
-        _: &mut Context<'_>,
-        _scheme: Scheme,
-        _mode: ResourceMode,
-    ) -> Poll<Result<(), io::Error>> {
+    fn poll_flush(&mut self, config: &ResourceConfig) -> Poll<Result<(), io::Error>> {
         Poll::Ready(Err(io::Error::AddrNotAvailable))
     }
-    fn poll_close(
-        &mut self,
-        _: &mut Context<'_>,
-        _scheme: Scheme,
-        _mode: ResourceMode,
-    ) -> Poll<Result<(), io::Error>> {
+    fn poll_close(&mut self, config: &ResourceConfig) -> Poll<Result<(), io::Error>> {
         Poll::Ready(Ok(()))
     }
     fn poll_seek(
         &mut self,
-        _cx: &mut Context,
-        _scheme: Scheme,
-        _mode: ResourceMode,
+        config: &ResourceConfig,
         _pos: SeekFrom,
     ) -> Poll<Result<u64, io::Error>> {
         Poll::Ready(Err(io::Error::AddrNotAvailable))
@@ -208,23 +192,19 @@ where
 {
     fn poll_read(
         &mut self,
-        _context: &mut Context,
-        _scheme: Scheme,
-        _mode: ResourceMode,
+        config: &ResourceConfig,
         _buf: &mut [u8],
     ) -> Poll<Result<usize, io::Error>> {
         Poll::Ready(Err(io::Error::AddrNotAvailable))
     }
     fn poll_write(
         &mut self,
-        _cx: &mut Context,
-        scheme: Scheme,
-        mode: ResourceMode,
+        config: &ResourceConfig,
         buf: &[u8],
     ) -> Poll<Result<usize, io::Error>> {
         // check if the mode kind is correct
-        if let ResourceMode::Default = mode {
-            match scheme {
+        if let ResourceMode::Default = config.mode {
+            match config.scheme {
                 Scheme::Digital => {
                     for byte in buf {
                         let res = match *byte != 0 {
@@ -268,27 +248,15 @@ where
             Poll::Ready(Err(io::Error::InvalidInput))
         }
     }
-    fn poll_flush(
-        &mut self,
-        _: &mut Context<'_>,
-        _scheme: Scheme,
-        _mode: ResourceMode,
-    ) -> Poll<Result<(), io::Error>> {
+    fn poll_flush(&mut self, config: &ResourceConfig) -> Poll<Result<(), io::Error>> {
         Poll::Ready(Ok(()))
     }
-    fn poll_close(
-        &mut self,
-        _: &mut Context<'_>,
-        _scheme: Scheme,
-        _mode: ResourceMode,
-    ) -> Poll<Result<(), io::Error>> {
+    fn poll_close(&mut self, config: &ResourceConfig) -> Poll<Result<(), io::Error>> {
         Poll::Ready(Ok(()))
     }
     fn poll_seek(
         &mut self,
-        _cx: &mut Context,
-        _scheme: Scheme,
-        _mode: ResourceMode,
+        config: &ResourceConfig,
         _pos: SeekFrom,
     ) -> Poll<Result<u64, io::Error>> {
         Poll::Ready(Err(io::Error::AddrNotAvailable))

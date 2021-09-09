@@ -2,16 +2,16 @@ use crate::{
     device::{ExtiEvent, SerialID},
     resources::serial::SerialDirection,
 };
-use heapless::spsc::{Queue, SingleCore};
+use heapless::spsc::Queue;
 
 // TODO: multicore with feature
 #[inline]
-pub(crate) fn get_queue() -> &'static mut Queue<Event, heapless::consts::U32, u8, SingleCore> {
+pub(crate) fn get_queue() -> &'static mut Queue<Event, 32> {
     // TODO: Make it Nonblocking QUEUE like BBQUEUE
-    static mut EVENT_QUEUE: Option<Queue<Event, heapless::consts::U32, u8, SingleCore>> = None;
+    static mut EVENT_QUEUE: Option<Queue<Event, 32>> = None;
     unsafe {
         if let None = EVENT_QUEUE {
-            EVENT_QUEUE = Some(Queue::u8_sc());
+            EVENT_QUEUE = Some(Queue::new());
         }
         EVENT_QUEUE.as_mut().unwrap()
     }

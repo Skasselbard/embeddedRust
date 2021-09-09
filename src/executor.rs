@@ -4,13 +4,13 @@ use alloc::collections::BTreeMap;
 use alloc::vec::Vec;
 use core::task::Waker;
 use device::handle_exti_event;
-use heapless::spsc::{Queue, SingleCore};
+use heapless::spsc::Queue;
 use task::TaskID;
 
 pub struct Executor {
     tasks: BTreeMap<TaskID, Task>,
-    /// T = TaskID, max length = 256, index type = u8
-    task_queue: Queue<TaskID, heapless::consts::U256, u8, SingleCore>, //TODO: Multicore on feature
+    /// T = TaskID, max length = 256
+    task_queue: Queue<TaskID, 256>,
     /// If an event is fired, these wakers requeue the corresponding tasks
     event_wakers: BTreeMap<Event, Vec<Waker>>,
 }
@@ -20,7 +20,7 @@ impl Executor {
     pub fn new() -> Executor {
         Executor {
             tasks: BTreeMap::new(),
-            task_queue: unsafe { Queue::u8_sc() },
+            task_queue: unsafe { Queue::new() },
             event_wakers: BTreeMap::new(),
         }
     }

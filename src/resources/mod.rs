@@ -54,7 +54,6 @@ pub(crate) struct Resources {
     pub(crate) channels: &'static mut [&'static mut dyn Resource],
     pub(crate) serials: &'static mut [&'static mut dyn Resource],
     pub(crate) timers: &'static mut [&'static mut dyn Resource],
-    // pub(crate) generic_resources: BTreeMap<u8, Box<dyn Resource>>,
 }
 
 impl Resources {
@@ -75,7 +74,6 @@ impl Resources {
             channels,
             serials,
             timers,
-            // generic_resources: BTreeMap::new(),
         }
     }
     fn get_resource_object(&'static mut self, id: &ResourceID) -> &mut dyn Resource {
@@ -87,11 +85,6 @@ impl Resources {
             IndexedPath::ADCPin(index) => *self.channels.get_mut(index as usize).unwrap(),
             IndexedPath::Serial(index) => *self.serials.get_mut(index as usize).unwrap(),
             IndexedPath::Timer(index) => *self.timers.get_mut(index as usize).unwrap(),
-            // IndexedPath::Generic(key) => self
-            //     .generic_resources
-            //     .get_mut(&key)
-            //     .expect("Missing virtual Resource")
-            //     .as_mut(),
         }
     }
     pub fn get_resource(&'static mut self, uri: &str) -> Result<ResourceID, ResourceError> {
@@ -123,56 +116,31 @@ impl Resources {
         let index = resources.search_resource_array(&path, resources.input_pins)?;
         Ok(resources.input_pins[index as usize])
     }
-    // fn search_virtual_resources(&self, path: &RawPath) -> Result<u8, ResourceError> {
-    //     self.generic_resources
-    //         .iter()
-    //         .find_map(|(k, v)| {
-    //             if &v.path() == path {
-    //                 Some((k, v))
-    //             } else {
-    //                 None
-    //             }
-    //         })
-    //         .ok_or(ResourceError::NotFound)
-    //         .map(|(k, _v)| *k)
-    // }
+}
+#[derive(Debug)]
+pub struct ResourceConfig<'rsrc, 'ctx> {
+    pub context: &'rsrc Context<'ctx>,
+    pub scheme: Scheme,
+    pub mode: ResourceMode,
 }
 
 /// Inspired by the async io traits of the futures trait
 pub trait Resource {
     fn poll_read(
         &mut self,
-        cx: &mut Context<'_>,
-        scheme: Scheme,
-        mode: ResourceMode,
+        config: &ResourceConfig,
         buf: &mut [u8],
     ) -> Poll<Result<usize, io::Error>>;
-    fn poll_write(
-        &mut self,
-        cx: &mut Context<'_>,
-        scheme: Scheme,
-        mode: ResourceMode,
-        buf: &[u8],
-    ) -> Poll<Result<usize, io::Error>>;
-    fn poll_flush(
-        &mut self,
-        cx: &mut Context<'_>,
-        scheme: Scheme,
-        mode: ResourceMode,
-    ) -> Poll<Result<(), io::Error>>;
-    fn poll_close(
-        &mut self,
-        cx: &mut Context<'_>,
-        scheme: Scheme,
-        mode: ResourceMode,
-    ) -> Poll<Result<(), io::Error>>;
+    fn poll_write(&mut self, config: &ResourceConfig, buf: &[u8])
+        -> Poll<Result<usize, io::Error>>;
+    fn poll_flush(&mut self, config: &ResourceConfig) -> Poll<Result<(), io::Error>>;
+    fn poll_close(&mut self, config: &ResourceConfig) -> Poll<Result<(), io::Error>>;
     fn poll_seek(
         &mut self,
-        cx: &mut Context<'_>,
-        scheme: Scheme,
-        mode: ResourceMode,
+        config: &ResourceConfig,
         pos: io::SeekFrom,
     ) -> Poll<Result<u64, io::Error>>;
+    //TODO: try to get rid of handle event
     fn handle_event(&mut self);
     fn path(&self) -> RawPath;
 }
@@ -238,9 +206,14 @@ impl AsyncRead for ResourceID {
         cx: &mut Context<'_>,
         buf: &mut [u8],
     ) -> Poll<Result<usize, io::Error>> {
+        let config = ResourceConfig {
+            context: cx,
+            scheme: self.scheme,
+            mode: self.mode,
+        };
         Runtime::get_resources()
             .get_resource_object(&*self)
-            .poll_read(cx, self.scheme, self.mode, buf)
+            .poll_read(&config, buf)
     }
 }
 impl AsyncWrite for ResourceID {
@@ -249,25 +222,40 @@ impl AsyncWrite for ResourceID {
         cx: &mut Context<'_>,
         buf: &[u8],
     ) -> Poll<Result<usize, io::Error>> {
+        let config = ResourceConfig {
+            context: cx,
+            scheme: self.scheme,
+            mode: self.mode,
+        };
         Runtime::get_resources()
             .get_resource_object(&*self)
-            .poll_write(cx, self.scheme, self.mode, buf)
+            .poll_write(&config, buf)
     }
     fn poll_flush(
         self: core::pin::Pin<&mut ResourceID>,
         cx: &mut Context<'_>,
     ) -> Poll<Result<(), io::Error>> {
+        let config = ResourceConfig {
+            context: cx,
+            scheme: self.scheme,
+            mode: self.mode,
+        };
         Runtime::get_resources()
             .get_resource_object(&*self)
-            .poll_flush(cx, self.scheme, self.mode)
+            .poll_flush(&config)
     }
     fn poll_close(
         self: core::pin::Pin<&mut ResourceID>,
         cx: &mut Context<'_>,
     ) -> Poll<Result<(), io::Error>> {
+        let config = ResourceConfig {
+            context: cx,
+            scheme: self.scheme,
+            mode: self.mode,
+        };
         Runtime::get_resources()
             .get_resource_object(&*self)
-            .poll_close(cx, self.scheme, self.mode)
+            .poll_close(&config)
     }
 }
 impl AsyncSeek for ResourceID {
@@ -276,17 +264,16 @@ impl AsyncSeek for ResourceID {
         cx: &mut Context<'_>,
         pos: io::SeekFrom,
     ) -> Poll<Result<u64, io::Error>> {
+        let config = ResourceConfig {
+            context: cx,
+            scheme: self.scheme,
+            mode: self.mode,
+        };
         Runtime::get_resources()
             .get_resource_object(&*self)
-            .poll_seek(cx, self.scheme, self.mode, pos)
+            .poll_seek(&config, pos)
     }
 }
-// impl ToUri for ResourceID {
-//     fn to_uri<'uri>(&self, buffer: &'uri mut str) -> Uri<'uri> {
-//         unimplemented!()
-//         //Runtime::get().get_resource_object(self).to_uri(buffer)
-//     }
-// }
 
 impl From<core::num::ParseFloatError> for ResourceError {
     fn from(error: core::num::ParseFloatError) -> Self {

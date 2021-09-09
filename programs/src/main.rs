@@ -102,12 +102,9 @@ pub async fn test_task() {
         .await
         .unwrap();
     let mut led_state = false;
-    let mut buf = [0; 10];
-    // TODO: Use Interrupts
-    // TODO: the serial has to be read on an event and store the result in a buffer
-    // TODO: and the read function of the resource has to read from the buffer
+    let mut buf = [0; 6];
     loop {
-        usart1.write("A".as_bytes()).await.unwrap();
+        usart1.write_all("ABCDEF".as_bytes()).await.unwrap();
         log::info!("written");
         usart1.read(&mut buf).await.unwrap();
         log::info!("{:?}", buf);

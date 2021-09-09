@@ -1,4 +1,5 @@
-use super::{path::RawPath, Resource, ResourceMode};
+use super::{path::RawPath, Resource, ResourceConfig, ResourceMode};
+use crate::io;
 use crate::{
     device::{
         SerialID, SerialInterrupConfigBuilder, SerialReadError, SerialWord, SerialWriteError,
@@ -6,11 +7,10 @@ use crate::{
     events::{self, Event},
     Runtime,
 };
-use crate::{io, schemes::Scheme};
 use bbqueue::{BBBuffer, ConstBBBuffer};
 use core::{
     mem::{size_of, MaybeUninit},
-    task::{Context, Poll},
+    task::Poll,
 };
 use embedded_hal::serial::{Read, Write};
 use io::SeekFrom;
@@ -66,6 +66,7 @@ fn dequeue(buffer: &mut SerialConsumer) -> Option<SerialQueueItem> {
                     &mut result as *mut Result<SerialWord, SerialReadError> as *mut u8,
                     size_of::<Result<SerialWord, SerialReadError>>(),
                 );
+                grant.release(size_of::<Result<SerialWord, SerialReadError>>());
                 Some(result)
             }
         }
@@ -88,35 +89,29 @@ pub(crate) struct InterruptHandler {
 impl InterruptHandler {
     #[inline]
     pub(crate) fn handle(&mut self) {
-        // read_pin
-        let result = match self.reader.read() {
-            Ok(r) => {
-                // log::info!("ok");
-                Ok(r)
-            }
-            Err(nb::Error::WouldBlock) => {
-                // log::info!("bl");
-                // can't read
-                // probably was a write interrupt
-                if self.config.write_enabled() {
-                    // disable write interrupt and send event
-                    // writing is handled by the resource implementation
-                    // resource will be waked by event and try writing again
-                    unsafe { self.config.disable_write() };
-                    events::push(Event::SerialEvent(self.serial_id));
-                } else {
-                    unreachable!(); // I think...
+        // check if it was a write interrupt
+        if self.config.write_enabled() {
+            // disable write interrupt and send event
+            // writing is handled by the resource implementation
+            // resource will be waked by event and try writing again
+            unsafe { self.config.disable_write() };
+        } else {
+            // read_pin
+            let result = match self.reader.read() {
+                Ok(r) => Ok(r),
+                Err(error) => {
+                    // no it was a read error
+                    match error {
+                        nb::Error::Other(e) => Err(e),
+                        // need to do something if read and write interrupt got mixed up...
+                        // in theroy they should cancel each other out
+                        nb::Error::WouldBlock => return,
+                    }
                 }
-                return;
-            }
-            Err(nb::Error::Other(e)) => {
-                // log::info!("er");
-                Err(e)
-            }
-        };
-        // log::info!("{:?}", result);
-        // store value
-        enqueue(&mut self.buffer, &result);
+            };
+            // store value
+            enqueue(&mut self.buffer, &result);
+        }
         events::push(Event::SerialEvent(self.serial_id));
     }
 }
@@ -152,31 +147,35 @@ where
 {
     fn poll_read(
         &mut self,
-        context: &mut Context,
-        _scheme: Scheme,
-        mode: ResourceMode,
+        config: &ResourceConfig,
         buf: &mut [u8],
     ) -> Poll<Result<usize, io::Error>> {
         //TODO: use scheme
-        if let ResourceMode::Default = mode {
-            log::info!("listen");
+        if let ResourceMode::Default = config.mode {
             unsafe { self.interrupt_config.enable_read() };
             let read_length = buf.len() / WORD_SIZE;
+            let mut read_count = 0;
             for chunk in buf.chunks_exact_mut(size_of::<SerialWord>()) {
                 match dequeue(self.read_buffer.as_mut().expect("uninitialized serial consumer")) {
                     Some(Ok(word)) => {
                         chunk.copy_from_slice(&from_word(word));
+                        read_count += 1;
                     }
-                    Some(Err(_)) => {
+                    Some(Err(e)) => {
+                        log::error!("{:?}: {:?}", self.id, e);
                         unsafe{self.interrupt_config.disable_read()};
                         return Poll::Ready(Err(io::Error::Interrupted))}
                         , // TODO: Log the Error
                     None => {
-                        Runtime::get().register_waker(
-                            &Event::SerialEvent(self.id),
-                            context.waker(),
-                        );
+                        if read_count == 0{
+                            Runtime::get().register_waker(
+                                &Event::SerialEvent(self.id),
+                                config.context.waker(),
+                            );
                         return Poll::Pending;
+                        }else{
+                            return Poll::Ready(Ok(read_count))
+                        }
                     }
                 }
             }
@@ -185,50 +184,48 @@ where
             Poll::Ready(Err(io::Error::InvalidInput))
         }
     }
-    fn poll_write<'a>(
-        &'a mut self,
-        context: &mut Context,
-        _scheme: Scheme,
-        mode: ResourceMode,
-        buf: &'a [u8],
+    fn poll_write(
+        &mut self,
+        config: &ResourceConfig,
+        buf: &[u8],
     ) -> Poll<Result<usize, io::Error>> {
         //TODO: use scheme
-        if let ResourceMode::Default = mode {
+        if let ResourceMode::Default = config.mode {
             // only accept data that are a multiple of the word size
             if buf.len() % WORD_SIZE != 0 {
                 return Poll::Ready(Err(io::Error::InvalidData));
             }
-            log::info!("{:?}", buf);
-            let write_length = buf.len() / WORD_SIZE;
-            for chunk in buf.chunks_exact(WORD_SIZE) {
-                let word = unsafe { to_word(chunk) };
-                match self.writer.write(*word) {
-                    Ok(()) => {}
-                    Err(nb::Error::Other(_)) => {
-                        //TODO: log error
-                        return Poll::Ready(Err(io::Error::Other));
-                    }
-                    Err(nb::Error::WouldBlock) => {
+        } else {
+            return Poll::Ready(Err(io::Error::InvalidInput));
+        }
+        let mut write_count = 0;
+        for chunk in buf.chunks_exact(WORD_SIZE) {
+            let word = unsafe { to_word(chunk) };
+            match self.writer.write(*word) {
+                Ok(()) => write_count += 1,
+                Err(nb::Error::Other(e)) => {
+                    log::error!("{:?}: {:?}", self.id, e);
+                    return Poll::Ready(Err(io::Error::Other));
+                }
+                Err(nb::Error::WouldBlock) => {
+                    if write_count == 0 {
+                        // if we didn't read anything yet the job is pending
                         unsafe { self.interrupt_config.enable_write() };
                         Runtime::get()
-                            .register_waker(&Event::SerialEvent(self.id), context.waker());
+                            .register_waker(&Event::SerialEvent(self.id), config.context.waker());
                         return Poll::Pending;
+                    } else {
+                        // otherwise we return the amount of bytes we managed to read so far
+                        return Poll::Ready(Ok(write_count));
                     }
-                };
-            }
-            Poll::Ready(Ok(write_length))
-        } else {
-            Poll::Ready(Err(io::Error::InvalidInput))
+                }
+            };
         }
+        Poll::Ready(Ok(buf.len() / WORD_SIZE))
     }
-    fn poll_flush(
-        &mut self,
-        _: &mut Context<'_>,
-        _scheme: Scheme,
-        mode: ResourceMode,
-    ) -> Poll<Result<(), io::Error>> {
+    fn poll_flush(&mut self, config: &ResourceConfig) -> Poll<Result<(), io::Error>> {
         //TODO: use scheme
-        if let ResourceMode::Default = mode {
+        if let ResourceMode::Default = config.mode {
             //FIXME: handle interrupts and polls correctly
             match self.writer.flush() {
                 Ok(()) => Poll::Ready(Ok(())),
@@ -239,19 +236,12 @@ where
             Poll::Ready(Err(io::Error::InvalidInput))
         }
     }
-    fn poll_close(
-        &mut self,
-        _: &mut Context<'_>,
-        _scheme: Scheme,
-        _mode: ResourceMode,
-    ) -> Poll<Result<(), io::Error>> {
+    fn poll_close(&mut self, _config: &ResourceConfig) -> Poll<Result<(), io::Error>> {
         Poll::Ready(Ok(()))
     }
     fn poll_seek(
         &mut self,
-        _cx: &mut Context,
-        _scheme: Scheme,
-        _mode: ResourceMode,
+        _config: &ResourceConfig,
         _pos: SeekFrom,
     ) -> Poll<Result<u64, io::Error>> {
         Poll::Ready(Err(io::Error::AddrNotAvailable))

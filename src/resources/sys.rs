@@ -5,7 +5,7 @@ use crate::{
 };
 use core::task::{Context, Poll};
 
-use super::{path::RawPath, ResourceError, ResourceMode};
+use super::{ResourceConfig, ResourceError, ResourceMode, path::RawPath};
 
 #[derive(Copy, Clone, PartialEq, Eq, Debug, Hash)]
 pub enum SysPaths {
@@ -30,9 +30,7 @@ pub enum SysResource {
 impl Resource for SysResource {
     fn poll_read(
         &mut self,
-        _context: &mut Context,
-        _scheme: Scheme,
-        _mode: ResourceMode,
+        config: &ResourceConfig,
         buf: &mut [u8],
     ) -> Poll<Result<usize, io::Error>> {
         let parsed = match self {
@@ -51,34 +49,20 @@ impl Resource for SysResource {
     }
     fn poll_write(
         &mut self,
-        _cx: &mut Context,
-        _scheme: Scheme,
-        _mode: ResourceMode,
+        config: &ResourceConfig,
         _buf: &[u8],
     ) -> Poll<Result<usize, io::Error>> {
         Poll::Ready(Err(io::Error::AddrNotAvailable))
     }
-    fn poll_flush(
-        &mut self,
-        _: &mut Context<'_>,
-        _scheme: Scheme,
-        _mode: ResourceMode,
-    ) -> Poll<Result<(), io::Error>> {
+    fn poll_flush(&mut self, config: &ResourceConfig) -> Poll<Result<(), io::Error>> {
         Poll::Ready(Err(io::Error::AddrNotAvailable))
     }
-    fn poll_close(
-        &mut self,
-        _: &mut Context<'_>,
-        _scheme: Scheme,
-        _mode: ResourceMode,
-    ) -> Poll<Result<(), io::Error>> {
+    fn poll_close(&mut self, config: &ResourceConfig) -> Poll<Result<(), io::Error>> {
         Poll::Ready(Ok(()))
     }
     fn poll_seek(
         &mut self,
-        _cx: &mut Context,
-        _scheme: Scheme,
-        _mode: ResourceMode,
+        config: &ResourceConfig,
         _pos: SeekFrom,
     ) -> Poll<Result<u64, io::Error>> {
         Poll::Ready(Err(io::Error::AddrNotAvailable))

@@ -1,4 +1,4 @@
-use super::{gpio::Pin, path::RawPath, Resource, ResourceError, ResourceMode};
+use super::{gpio::Pin, path::RawPath, Resource, ResourceConfig, ResourceError, ResourceMode};
 use crate::{io, schemes::Scheme, utilities::ByteWriter};
 use core::{
     convert::{TryFrom, TryInto},
@@ -35,16 +35,14 @@ where
 {
     fn poll_read(
         &mut self,
-        _context: &mut Context,
-        scheme: Scheme,
-        mode: ResourceMode,
+        config: &ResourceConfig,
         buf: &mut [u8],
     ) -> Poll<Result<usize, io::Error>> {
-        if let ResourceMode::PWM(mode) = mode {
+        if let ResourceMode::PWM(mode) = config.mode {
             let duty: usize = self.resource.get_duty().into();
             let mut buffer = ByteWriter::new(buf);
             match mode {
-                PWMMode::Default => match scheme {
+                PWMMode::Default => match config.scheme {
                     Scheme::Analog => {
                         write!(buffer, "{}", duty).map_err(|_| io::Error::InvalidInput)?
                     }
@@ -68,15 +66,13 @@ where
     /// takes a f32 percentage (between 0.0 and 1.0) and sets duty accordingly
     fn poll_write(
         &mut self,
-        _cx: &mut Context,
-        scheme: Scheme,
-        mode: ResourceMode,
+        config: &ResourceConfig,
         buf: &[u8],
     ) -> Poll<Result<usize, io::Error>> {
-        if let ResourceMode::PWM(mode) = mode {
+        if let ResourceMode::PWM(mode) = config.mode {
             match mode {
                 PWMMode::Default => {
-                    match scheme {
+                    match config.scheme {
                         Scheme::Analog => {
                             if buf.len() != core::mem::size_of::<usize>() {
                                 return Poll::Ready(Err(io::Error::InvalidInput));
@@ -136,27 +132,15 @@ where
             Poll::Ready(Err(io::Error::InvalidInput))
         }
     }
-    fn poll_flush(
-        &mut self,
-        _: &mut Context<'_>,
-        _scheme: Scheme,
-        _mode: ResourceMode,
-    ) -> Poll<Result<(), io::Error>> {
+    fn poll_flush(&mut self, config: &ResourceConfig) -> Poll<Result<(), io::Error>> {
         Poll::Ready(Ok(()))
     }
-    fn poll_close(
-        &mut self,
-        _: &mut Context<'_>,
-        _scheme: Scheme,
-        _mode: ResourceMode,
-    ) -> Poll<Result<(), io::Error>> {
+    fn poll_close(&mut self, config: &ResourceConfig) -> Poll<Result<(), io::Error>> {
         Poll::Ready(Ok(()))
     }
     fn poll_seek(
         &mut self,
-        _cx: &mut Context,
-        _scheme: Scheme,
-        _mode: ResourceMode,
+        config: &ResourceConfig,
         _pos: SeekFrom,
     ) -> Poll<Result<u64, io::Error>> {
         Poll::Ready(Err(io::Error::AddrNotAvailable))

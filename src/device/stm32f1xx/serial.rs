@@ -1,6 +1,9 @@
 use crate::resources::serial::{InterruptConfig, InterruptConfigBuilder, InterruptHandler};
 use crate::resources::ResourceError;
-use core::sync::atomic::{AtomicBool, Ordering};
+use core::{
+    sync::atomic::{AtomicBool, Ordering},
+    write,
+};
 use stm32f1xx_hal::device::{interrupt, USART1, USART2, USART3};
 use stm32f1xx_hal::serial::{Rx, Tx};
 
@@ -40,54 +43,30 @@ impl SerialID {
     }
 }
 
+macro_rules! init_serial {
+    ($serial:ty) => {{
+        static CONFIG: DeviceConfig<$serial> = DeviceConfig {
+            write_enabled: AtomicBool::new(false),
+            reader: unsafe {
+                &(core::mem::transmute::<(), Rx<$serial>>(())) as *const Rx<$serial>
+                    as *mut Rx<$serial>
+            },
+            writer: unsafe {
+                &(core::mem::transmute::<(), Tx<$serial>>(())) as *const Tx<$serial>
+                    as *mut Tx<$serial>
+            },
+        };
+        &CONFIG as &dyn InterruptConfig
+    }};
+}
 pub(crate) struct SerialInterrupConfigBuilder;
 impl InterruptConfigBuilder for SerialInterrupConfigBuilder {
     unsafe fn new(serial_id: SerialID) -> &'static dyn InterruptConfig {
-        let config = match serial_id {
-            SerialID::Usart1 => {
-                static DCU1: DeviceConfig<USART1> = DeviceConfig {
-                    write_enabled: AtomicBool::new(false),
-                    reader: unsafe {
-                        &(core::mem::transmute::<(), Rx<USART1>>(())) as *const Rx<USART1>
-                            as *mut Rx<USART1>
-                    },
-                    writer: unsafe {
-                        &(core::mem::transmute::<(), Tx<USART1>>(())) as *const Tx<USART1>
-                            as *mut Tx<USART1>
-                    },
-                };
-                &DCU1 as &dyn InterruptConfig
-            }
-            SerialID::Usart2 => {
-                static DCU2: DeviceConfig<USART2> = DeviceConfig {
-                    write_enabled: AtomicBool::new(false),
-                    reader: unsafe {
-                        &(core::mem::transmute::<(), Rx<USART2>>(())) as *const Rx<USART2>
-                            as *mut Rx<USART2>
-                    },
-                    writer: unsafe {
-                        &(core::mem::transmute::<(), Tx<USART2>>(())) as *const Tx<USART2>
-                            as *mut Tx<USART2>
-                    },
-                };
-                &DCU2 as &dyn InterruptConfig
-            }
-            SerialID::Usart3 => {
-                static DCU3: DeviceConfig<USART3> = DeviceConfig {
-                    write_enabled: AtomicBool::new(false),
-                    reader: unsafe {
-                        &(core::mem::transmute::<(), Rx<USART3>>(())) as *const Rx<USART3>
-                            as *mut Rx<USART3>
-                    },
-                    writer: unsafe {
-                        &(core::mem::transmute::<(), Tx<USART3>>(())) as *const Tx<USART3>
-                            as *mut Tx<USART3>
-                    },
-                };
-                &DCU3 as &dyn InterruptConfig
-            }
-        };
-        config
+        match serial_id {
+            SerialID::Usart1 => init_serial!(USART1),
+            SerialID::Usart2 => init_serial!(USART2),
+            SerialID::Usart3 => init_serial!(USART3),
+        }
     }
 }
 

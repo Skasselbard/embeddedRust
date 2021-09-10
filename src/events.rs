@@ -4,7 +4,6 @@ use crate::{
 };
 use heapless::spsc::Queue;
 
-// TODO: multicore with feature
 #[inline]
 pub(crate) fn get_queue() -> &'static mut Queue<Event, 32> {
     // TODO: Make it Nonblocking QUEUE like BBQUEUE

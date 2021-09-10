@@ -1,4 +1,6 @@
+#![feature(proc_macro_span)]
 mod config;
+
 mod devices;
 mod generation;
 mod types;
@@ -11,7 +13,7 @@ use types::*;
 
 #[proc_macro_attribute]
 pub fn device_config(attr: TokenStream, item: TokenStream) -> TokenStream {
-    let config = parse_json(&attr);
+    let config = parse_yaml(&attr);
     let strukt = parse_macro_input!(item as ItemStruct);
     let struct_name = strukt.ident.clone();
     let statiks = generation::component_statics(&config);
@@ -57,9 +59,19 @@ pub fn device_config(attr: TokenStream, item: TokenStream) -> TokenStream {
         }
     )
     .into()
-    // quote!().into()
 }
 
-pub(crate) fn parse_json(attributes: &TokenStream) -> Config {
-    serde_json::from_str(&attributes.to_string()).expect("ParsingError")
+pub(crate) fn parse_yaml(attributes: &TokenStream) -> Config {
+    let mut att_folded = Vec::new();
+    // extract all spans from the attribute token stream
+    attributes
+        .clone()
+        .into_iter()
+        .for_each(|elem| att_folded.push(elem.span()));
+    // join all spans
+    let att_span = att_folded
+        .iter()
+        .fold(att_folded[0], |acc, elem| acc.join(*elem).unwrap());
+    let device_definition = att_span.source_text().expect("msg");
+    serde_yaml::from_str(&device_definition).expect("ParsingError")
 }
